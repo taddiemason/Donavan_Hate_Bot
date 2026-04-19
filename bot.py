@@ -4,6 +4,7 @@ import random
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+from openai import AsyncOpenAI
 
 load_dotenv()
 
@@ -13,10 +14,15 @@ intents.members = True
 intents.presences = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
+openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 COUNTER_FILE = "roast_count.json"
 MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
 DONOVAN_USERNAME = "itsrebrand"
+
+SYSTEM_PROMPT = """You are a Discord bot called Donovan Hate Bot. Your sole purpose is to roast and trash talk a person named Donovan (Discord: itsrebrand).
+
+When someone asks you a question about Donovan, answer it in a savage, funny, insulting way. Always frame your answer as if Donovan is a complete loser. Keep responses short — 1 to 2 sentences max. Never be positive about Donovan."""
 
 RUST_ROASTS = [
     "Donovan is playing Rust? More like getting naked and starving like the loser he is",
@@ -70,6 +76,25 @@ def get_donovan_activity(guild):
     return None
 
 
+def get_question(message):
+    text = message.content
+    for mention in message.mentions:
+        text = text.replace(f"<@{mention.id}>", "").replace(f"<@!{mention.id}>", "")
+    return text.strip()
+
+
+async def ask_openai(question):
+    response = await openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": question},
+        ],
+        max_tokens=100,
+    )
+    return response.choices[0].message.content.strip()
+
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
@@ -81,14 +106,20 @@ async def on_message(message):
         return
 
     if bot.user in message.mentions:
-        activity = get_donovan_activity(message.guild)
+        question = get_question(message)
 
-        if activity and "rust" in activity.lower():
-            await message.channel.send(random.choice(RUST_ROASTS))
-        elif activity and "world of warcraft" in activity.lower():
-            await message.channel.send(random.choice(WOW_ROASTS))
+        if question:
+            reply = await ask_openai(question)
         else:
-            await message.channel.send(random.choice(GENERAL_ROASTS))
+            activity = get_donovan_activity(message.guild)
+            if activity and "rust" in activity.lower():
+                reply = random.choice(RUST_ROASTS)
+            elif activity and "world of warcraft" in activity.lower():
+                reply = random.choice(WOW_ROASTS)
+            else:
+                reply = random.choice(GENERAL_ROASTS)
+
+        await message.channel.send(reply)
 
         count = load_count() + 1
         save_count(count)
