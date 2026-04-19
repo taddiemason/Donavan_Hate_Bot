@@ -43,7 +43,18 @@ WOW_ROASTS = [
     "Donovan is out here playing WoW like it's 2007. Just like his haircut.",
 ]
 
-GENERAL_ROASTS = [
+DONOVAN_ROASTS_DIRECT = [
+    "Shut up Donovan, nobody asked you",
+    "Donovan asking the bot he's named after for help is the saddest thing I've ever seen",
+    "Bro you have burger wrappers stuck to your ass, why are you talking to me",
+    "The audacity of this man. Get out of here Donovan",
+    "Donovan really thought he could slide in here unnoticed. Pathetic.",
+    "Go touch grass Donovan, the internet doesn't want you either",
+    "Donovan asking questions like anyone here respects him lmao",
+]
+
+
+
     "Donovans a loser",
     "Fuck Donovan",
     "Donovan has daddy issues",
@@ -125,6 +136,10 @@ async def on_message(message):
 
     if bot_mentioned:
         try:
+            if message.author.name.lower() == DONOVAN_USERNAME.lower():
+                await message.channel.send(random.choice(DONOVAN_ROASTS_DIRECT))
+                return
+
             question = get_question(message)
             print(f"[DEBUG] Mention detected. Question: '{question}'")
 
