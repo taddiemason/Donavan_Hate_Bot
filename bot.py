@@ -59,10 +59,14 @@ def get_donovan_activity(guild):
     member = discord.utils.find(
         lambda m: m.name.lower() == DONOVAN_USERNAME.lower(), guild.members
     )
-    if member:
-        for activity in member.activities:
-            if isinstance(activity, discord.Game):
-                return activity.name
+    if not member:
+        print(f"[DEBUG] Could not find member: {DONOVAN_USERNAME}")
+        return None
+    print(f"[DEBUG] Found member: {member.name}, activities: {member.activities}")
+    for activity in member.activities:
+        print(f"[DEBUG] Activity: {activity} | Type: {type(activity)}")
+        if isinstance(activity, (discord.Game, discord.Activity)):
+            return activity.name
     return None
 
 
