@@ -14,7 +14,10 @@ intents.members = True
 intents.presences = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+groq_client = AsyncOpenAI(
+    api_key=os.getenv("GROQ_API_KEY"),
+    base_url="https://api.groq.com/openai/v1",
+)
 
 COUNTER_FILE = "roast_count.json"
 MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
@@ -85,8 +88,8 @@ def get_question(message):
 
 async def ask_openai(question):
     try:
-        response = await openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+        response = await groq_client.chat.completions.create(
+            model="llama3-8b-8192",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": question},
