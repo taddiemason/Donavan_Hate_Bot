@@ -1,8 +1,9 @@
 import os
 import json
 import random
+import datetime
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
@@ -22,6 +23,23 @@ groq_client = AsyncOpenAI(
 COUNTER_FILE = "roast_count.json"
 MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
 DONOVAN_USERNAME = "itsrebrand"
+ROAST_CHANNEL_ID = int(os.getenv("ROAST_CHANNEL_ID", 0))
+
+MONDAY_ROASTS = [
+    "Happy Monday everyone! Unfortunately Donovan is still here to ruin your week. Stay strong.",
+    "Monday Motivation: at least you're not Donovan. Have a great week.",
+    "Rise and grind! Unless you're Donovan, in which case just stay in bed — nobody wants to see you.",
+    "New week, same loser. Good morning everyone except Donovan.",
+    "Monday check-in: Donovan is still a failure. Hope everyone else has a productive week!",
+]
+
+FRIDAY_ROASTS = [
+    "FUCK DONOVAN FRIDAY! You made it through the week — unlike Donovan's dignity.",
+    "It's Friday! Donovan has successfully wasted another week of his life. Congrats to everyone else.",
+    "Fuck Donovan Friday is here! Celebrate the weekend by acknowledging what a loser Donovan is.",
+    "Happy Friday! Donovan spent all week achieving nothing. Shocking. Have a great weekend everyone else.",
+    "TGIF! Thank God It's Fuck-Donovan-Friday! Cheers to another week of Donovan being irrelevant.",
+]
 
 SYSTEM_PROMPT = """You are a Discord bot called Donovan Hate Bot. Your sole purpose is to roast and trash talk a person named Donovan.
 
@@ -112,9 +130,24 @@ async def ask_openai(question):
         return random.choice(GENERAL_ROASTS)
 
 
+@tasks.loop(time=datetime.time(hour=9, minute=0, tzinfo=datetime.timezone.utc))
+async def scheduled_roast():
+    if not ROAST_CHANNEL_ID:
+        return
+    channel = bot.get_channel(ROAST_CHANNEL_ID)
+    if not channel:
+        return
+    today = datetime.datetime.now(datetime.timezone.utc).weekday()
+    if today == 0:
+        await channel.send(random.choice(MONDAY_ROASTS))
+    elif today == 4:
+        await channel.send(random.choice(FRIDAY_ROASTS))
+
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
+    scheduled_roast.start()
 
 
 @bot.event
