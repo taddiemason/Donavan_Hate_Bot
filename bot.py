@@ -108,7 +108,13 @@ async def on_ready():
 
 
 @bot.event
+async def on_disconnect():
+    print("[DEBUG] Bot disconnected from Discord")
+
+
+@bot.event
 async def on_message(message):
+    print(f"[DEBUG] Any message received: {message.author} - {message.content[:50]}")
     if message.author == bot.user:
         return
 
