@@ -53,8 +53,7 @@ DONOVAN_ROASTS_DIRECT = [
     "Donovan asking questions like anyone here respects him lmao",
 ]
 
-
-
+GENERAL_ROASTS = [
     "Donovans a loser",
     "Fuck Donovan",
     "Donovan has daddy issues",
