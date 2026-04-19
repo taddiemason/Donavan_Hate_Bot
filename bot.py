@@ -1,4 +1,5 @@
 import os
+import json
 import random
 import discord
 from discord.ext import commands
@@ -10,6 +11,21 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+COUNTER_FILE = "roast_count.json"
+MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
+
+
+def load_count():
+    if os.path.exists(COUNTER_FILE):
+        with open(COUNTER_FILE, "r") as f:
+            return json.load(f).get("count", 0)
+    return 0
+
+
+def save_count(count):
+    with open(COUNTER_FILE, "w") as f:
+        json.dump({"count": count}, f)
 
 
 @bot.event
@@ -31,6 +47,14 @@ async def on_message(message):
             "Donovan has burger wrappers stuck to his ass",
         ]
         await message.channel.send(random.choice(responses))
+
+        count = load_count() + 1
+        save_count(count)
+
+        if count in MILESTONES:
+            await message.channel.send(
+                f"Congratulations Donovan, you've been insulted {count} times. Keep up the great work!"
+            )
 
     await bot.process_commands(message)
 

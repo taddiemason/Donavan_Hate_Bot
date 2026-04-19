@@ -1,3 +1,4 @@
 .env
+roast_count.json
 __pycache__/
 *.pyc
