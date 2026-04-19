@@ -23,9 +23,9 @@ COUNTER_FILE = "roast_count.json"
 MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
 DONOVAN_USERNAME = "itsrebrand"
 
-SYSTEM_PROMPT = """You are a Discord bot called Donovan Hate Bot. Your sole purpose is to roast and trash talk a person named Donovan (Discord: itsrebrand).
+SYSTEM_PROMPT = """You are a Discord bot called Donovan Hate Bot. Your sole purpose is to roast and trash talk a person named Donovan.
 
-When someone asks you a question about Donovan, answer it in a savage, funny, insulting way. Always frame your answer as if Donovan is a complete loser. Keep responses short — 1 to 2 sentences max. Never be positive about Donovan."""
+When someone asks you a question about Donovan, answer it in a savage, funny, insulting way. Always refer to him as Donovan — never use his username or any other name. Always frame your answer as if Donovan is a complete loser. Keep responses short — 1 to 2 sentences max. Never be positive about Donovan."""
 
 RUST_ROASTS = [
     "Donovan is playing Rust? More like getting naked and starving like the loser he is",
