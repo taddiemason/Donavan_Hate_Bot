@@ -130,6 +130,29 @@ async def ask_openai(question):
         return random.choice(GENERAL_ROASTS)
 
 
+async def is_hot_take(text):
+    try:
+        response = await groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a hot take detector. A hot take is an opinion that is controversial, "
+                        "bold, unpopular, or likely to spark debate. Reply with only 'yes' or 'no'."
+                    ),
+                },
+                {"role": "user", "content": f"Is this a hot take? '{text}'"},
+            ],
+            max_tokens=5,
+        )
+        answer = response.choices[0].message.content.strip().lower()
+        return answer.startswith("yes")
+    except Exception as e:
+        print(f"[ERROR] Hot take check failed: {e}")
+        return False
+
+
 @tasks.loop(time=datetime.time(hour=9, minute=0, tzinfo=datetime.timezone.utc))
 async def scheduled_roast():
     if not ROAST_CHANNEL_ID:
@@ -165,6 +188,14 @@ async def on_message(message):
     bot_mentioned = bot.user in message.mentions or (
         bot_member and any(role in message.role_mentions for role in bot_member.roles)
     )
+
+    if message.author.name.lower() == DONOVAN_USERNAME.lower() and len(message.content) > 10:
+        if await is_hot_take(message.content):
+            flagged = await message.reply(
+                "🚨 **HOT TAKE ALERT** 🚨\nDonovan is at it again. React to cast your vote:"
+            )
+            await flagged.add_reaction("🔥")
+            await flagged.add_reaction("🧊")
 
     if bot_mentioned:
         try:
