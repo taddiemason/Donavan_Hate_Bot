@@ -1,4 +1,5 @@
 import os
+import random
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -22,7 +23,14 @@ async def on_message(message):
         return
 
     if bot.user in message.mentions:
-        await message.channel.send(f"What do you want, {message.author.mention}?")
+        responses = [
+            "Donovans a loser",
+            "Fuck Donovan",
+            "Donovan has daddy issues",
+            "Donovan is a pussy",
+            "Donovan has burger wrappers stuck to his ass",
+        ]
+        await message.channel.send(random.choice(responses))
 
     await bot.process_commands(message)
 
