@@ -118,7 +118,12 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
-    if bot.user in message.mentions:
+    bot_member = message.guild.get_member(bot.user.id)
+    bot_mentioned = bot.user in message.mentions or (
+        bot_member and any(role in message.role_mentions for role in bot_member.roles)
+    )
+
+    if bot_mentioned:
         try:
             question = get_question(message)
             print(f"[DEBUG] Mention detected. Question: '{question}'")
