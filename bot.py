@@ -84,15 +84,19 @@ def get_question(message):
 
 
 async def ask_openai(question):
-    response = await openai_client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": question},
-        ],
-        max_tokens=100,
-    )
-    return response.choices[0].message.content.strip()
+    try:
+        response = await openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": question},
+            ],
+            max_tokens=100,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"[ERROR] OpenAI request failed: {e}")
+        return random.choice(GENERAL_ROASTS)
 
 
 @bot.event
