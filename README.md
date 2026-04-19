@@ -179,6 +179,41 @@ Since the bot is already running (e.g. via systemd or screen), the update proces
 
 ---
 
+## Troubleshooting
+
+### Bot sending duplicate replies
+
+If the bot sends two roasts per mention, it means two instances are running at the same time. This happens if you started the bot manually AND via systemd, or started it twice in a screen session.
+
+Check for multiple running instances:
+
+```bash
+ps aux | grep bot.py
+```
+
+Kill them all:
+
+```bash
+pkill -f bot.py
+```
+
+Then start just one instance — either manually:
+
+```bash
+source venv/bin/activate
+python bot.py
+```
+
+Or via systemd:
+
+```bash
+sudo systemctl start donavanbot
+```
+
+Don't run both manually and via systemd at the same time — pick one method and stick to it.
+
+---
+
 ## File Overview
 
 | File | Purpose |
