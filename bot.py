@@ -113,28 +113,35 @@ async def on_message(message):
         return
 
     if bot.user in message.mentions:
-        question = get_question(message)
+        try:
+            question = get_question(message)
+            print(f"[DEBUG] Mention detected. Question: '{question}'")
 
-        if question:
-            reply = await ask_openai(question)
-        else:
-            activity = get_donovan_activity(message.guild)
-            if activity and "rust" in activity.lower():
-                reply = random.choice(RUST_ROASTS)
-            elif activity and "world of warcraft" in activity.lower():
-                reply = random.choice(WOW_ROASTS)
+            if question:
+                print(f"[DEBUG] Sending to Groq...")
+                reply = await ask_openai(question)
             else:
-                reply = random.choice(GENERAL_ROASTS)
+                activity = get_donovan_activity(message.guild)
+                if activity and "rust" in activity.lower():
+                    reply = random.choice(RUST_ROASTS)
+                elif activity and "world of warcraft" in activity.lower():
+                    reply = random.choice(WOW_ROASTS)
+                else:
+                    reply = random.choice(GENERAL_ROASTS)
 
-        await message.channel.send(reply)
+            print(f"[DEBUG] Sending reply: '{reply}'")
+            await message.channel.send(reply)
 
-        count = load_count() + 1
-        save_count(count)
+            count = load_count() + 1
+            save_count(count)
 
-        if count in MILESTONES:
-            await message.channel.send(
-                f"Congratulations Donovan, you've been insulted {count} times. Keep up the great work!"
-            )
+            if count in MILESTONES:
+                await message.channel.send(
+                    f"Congratulations Donovan, you've been insulted {count} times. Keep up the great work!"
+                )
+        except Exception as e:
+            print(f"[ERROR] on_message crashed: {e}")
+            await message.channel.send(random.choice(GENERAL_ROASTS))
 
     await bot.process_commands(message)
 
