@@ -149,6 +149,36 @@ Deploy the project to any VPS (DigitalOcean, Linode, AWS EC2, etc.), follow the 
 
 ---
 
+## Updating the Bot
+
+Since the bot is already running (e.g. via systemd or screen), the update process is:
+
+1. **Pull the latest code:**
+   ```bash
+   git pull origin main
+   ```
+
+2. **Install any new dependencies** (only needed if `requirements.txt` changed):
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Restart the bot** so it picks up the changes:
+
+   - **systemd:**
+     ```bash
+     sudo systemctl restart donavanbot
+     ```
+   - **screen:** Kill the old session and start a new one:
+     ```bash
+     screen -r donavanbot
+     # Press Ctrl+C to stop the bot
+     python bot.py
+     # Press Ctrl+A then D to detach
+     ```
+
+---
+
 ## File Overview
 
 | File | Purpose |
