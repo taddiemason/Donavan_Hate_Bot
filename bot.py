@@ -28,7 +28,7 @@ COUNTER_FILE = "roast_count.json"
 ROAST_LOG_FILE = "roast_log.json"
 ECONOMY_FILE = "economy.json"
 MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
-DONOVAN_USERNAME = "itsrebrand"
+DONOVAN_USERNAMES = {"itsrebrand", "streamerweiner"}
 ROAST_CHANNEL_ID = int(os.getenv("ROAST_CHANNEL_ID", 0))
 VOICE_CHANNEL_ID = int(os.getenv("VOICE_CHANNEL_ID", 0))
 INSURANCE_COST_PER_MINUTE = 10
@@ -423,18 +423,18 @@ def get_daily_reward(streak):
     return base
 
 
+def is_donovan(user):
+    return user.name.lower() in DONOVAN_USERNAMES
+
+
 def get_donovan_activity(guild):
-    member = discord.utils.find(
-        lambda m: m.name.lower() == DONOVAN_USERNAME.lower(), guild.members
-    )
-    if not member:
-        print(f"[DEBUG] Could not find member: {DONOVAN_USERNAME}")
-        return None
-    print(f"[DEBUG] Found member: {member.name}, activities: {member.activities}")
-    for activity in member.activities:
-        print(f"[DEBUG] Activity: {activity} | Type: {type(activity)}")
-        if isinstance(activity, (discord.Game, discord.Activity)):
-            return activity.name
+    for member in guild.members:
+        if member.name.lower() in DONOVAN_USERNAMES:
+            print(f"[DEBUG] Found member: {member.name}, activities: {member.activities}")
+            for activity in member.activities:
+                print(f"[DEBUG] Activity: {activity} | Type: {type(activity)}")
+                if isinstance(activity, (discord.Game, discord.Activity)):
+                    return activity.name
     return None
 
 
@@ -485,11 +485,9 @@ async def is_hot_take(text):
 
 
 def get_donovan_voice_channel(guild):
-    member = discord.utils.find(
-        lambda m: m.name.lower() == DONOVAN_USERNAME.lower(), guild.members
-    )
-    if member and member.voice:
-        return member.voice.channel
+    for member in guild.members:
+        if member.name.lower() in DONOVAN_USERNAMES and member.voice:
+            return member.voice.channel
     if VOICE_CHANNEL_ID:
         return bot.get_channel(VOICE_CHANNEL_ID)
     return None
@@ -684,7 +682,7 @@ async def on_message(message):
         bot_member and any(role in message.role_mentions for role in bot_member.roles)
     )
 
-    if message.author.name.lower() == DONOVAN_USERNAME.lower():
+    if is_donovan(message.author):
         add_coins(message.author.id, 1)
         eco = load_economy()
         if eco.get("slow_clap_pending", 0) > 0:
@@ -693,7 +691,7 @@ async def on_message(message):
             for _ in range(5):
                 await message.add_reaction("👏")
 
-    if message.author.name.lower() == DONOVAN_USERNAME.lower() and len(message.content) > 10:
+    if is_donovan(message.author) and len(message.content) > 10:
         if await is_hot_take(message.content):
             flagged = await message.reply(
                 "🚨 **HOT TAKE ALERT** 🚨\nDonovan is at it again. React to cast your vote:"
@@ -703,7 +701,7 @@ async def on_message(message):
 
     if bot_mentioned:
         try:
-            if message.author.name.lower() == DONOVAN_USERNAME.lower():
+            if is_donovan(message.author):
                 await message.channel.send(random.choice(DONOVAN_ROASTS_DIRECT))
                 return
 
@@ -752,7 +750,7 @@ async def on_message(message):
                 await tts_queue.put((message.guild.id, send_text))
 
             if consume_upgrade(message.author.id, "snitch"):
-                donovan = discord.utils.find(lambda m: m.name.lower() == DONOVAN_USERNAME.lower(), message.guild.members)
+                donovan = discord.utils.find(lambda m: m.name.lower() in DONOVAN_USERNAMES, message.guild.members)
                 if donovan:
                     try:
                         await donovan.send(f"📬 Someone wanted you to see this:\n_{reply}_")
@@ -778,7 +776,7 @@ async def on_message(message):
             if consume_upgrade(message.author.id, "receipt"):
                 try:
                     async for old_msg in message.channel.history(limit=200):
-                        if old_msg.author.name.lower() == DONOVAN_USERNAME.lower() and len(old_msg.content) > 15 and old_msg.id != message.id:
+                        if old_msg.author.name.lower() in DONOVAN_USERNAMES and len(old_msg.content) > 15 and old_msg.id != message.id:
                             await message.channel.send(f"🧾 **RECEIPT:** _{old_msg.author.display_name} once said:_ \"{old_msg.content}\"")
                             break
                 except Exception:
@@ -809,7 +807,7 @@ async def on_message(message):
                     await message.channel.send(f"🔥 {roast}")
 
             if consume_upgrade(message.author.id, "exile"):
-                donovan = discord.utils.find(lambda m: m.name.lower() == DONOVAN_USERNAME.lower(), message.guild.members)
+                donovan = discord.utils.find(lambda m: m.name.lower() in DONOVAN_USERNAMES, message.guild.members)
                 if donovan:
                     try:
                         until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=60)
@@ -1039,7 +1037,7 @@ async def stock_market(ctx):
 @bot.command(name="Commands")
 async def commands_list(ctx):
     await ctx.send(
-        "**📋 Donovan Hate Bot — Commands**\n\n"
+        "**📋 Donovan Hate Bot — Commands (1/2)**\n\n"
         "**`@Donovan Hate Bot`** — Roasts Donovan. Ask it a question for a smart response.\n"
         "**`!Trial <reason>`** — Puts Donovan on trial. Server votes guilty/not guilty for 60 seconds.\n"
         "**`!Guesswhosaidit`** — 3 round game. Guess if the quote was Donovan or someone else.\n"
@@ -1057,8 +1055,11 @@ async def commands_list(ctx):
         "**`!give @user <amount>`** — Transfer coins to another member.\n"
         "**`!blackmarket`** — View peer-to-peer upgrade listings.\n"
         "**`!listitem <item> <price>`** — List an owned upgrade for sale.\n"
-        "**`!stockmarket`** — View Donovan's tanking stock price and top roaster rankings.\n"
-        "\n**🎮 Minigames & Rewards**\n"
+        "**`!stockmarket`** — View Donovan's tanking stock price and top roaster rankings."
+    )
+    await ctx.send(
+        "**📋 Donovan Hate Bot — Commands (2/2)**\n\n"
+        "**🎮 Minigames & Rewards**\n"
         "**`!daily`** — 25 coin daily check-in. Streak builds a multiplier, doubles at 7 days.\n"
         "**`!flip <amount> heads/tails`** — Coinflip gamble.\n"
         "**`!slots <amount>`** — Slot machine. Match symbols for big payouts.\n"
@@ -1067,7 +1068,7 @@ async def commands_list(ctx):
         "**`!highlow <amount>`** — Guess higher or lower, chain correct answers for a multiplier.\n"
         "**`!lottery <amount>`** — Buy lottery tickets (10 coins each). Drawn every Sunday at 9 PM EST.\n"
         "**`!buyitem <id>`** — Buy an upgrade from the black market.\n\n"
-        "**`!Commands`** — Shows this list.\n"
+        "**`!Commands`** — Shows this list."
     )
 
 
@@ -1166,7 +1167,7 @@ async def use_item(ctx, item_name: str = None):
 
 @bot.command(name="bounty")
 async def post_bounty(ctx, amount: int = None, *, description: str = None):
-    if ctx.author.name.lower() == DONOVAN_USERNAME.lower():
+    if is_donovan(ctx.author):
         await ctx.send("Donovan cannot post bounties. He IS the bounty.")
         return
     if not amount or not description or amount <= 0:
@@ -1197,7 +1198,7 @@ async def view_bounties(ctx):
 
 @bot.command(name="insurance")
 async def insurance(ctx, minutes: int = None):
-    if ctx.author.name.lower() != DONOVAN_USERNAME.lower():
+    if not is_donovan(ctx.author):
         await ctx.send("Only Donovan needs insurance. Everyone else is fine.")
         return
     if not minutes or minutes <= 0:
@@ -1302,7 +1303,7 @@ async def buy_market_item(ctx, listing_id: int = None):
 async def guess_who(ctx):
     global guess_game_active
 
-    if ctx.author.name.lower() == DONOVAN_USERNAME.lower():
+    if is_donovan(ctx.author):
         await ctx.send("You're not allowed to play this game Donovan. You might recognise yourself.")
         return
 
@@ -1376,7 +1377,7 @@ async def guess_who(ctx):
 async def trial(ctx, *, reason: str = None):
     global trial_active
 
-    if ctx.author.name.lower() == DONOVAN_USERNAME.lower():
+    if is_donovan(ctx.author):
         await ctx.send("You can't put yourself on trial Donovan. Though honestly you should.")
         return
 
@@ -1436,7 +1437,7 @@ async def trial(ctx, *, reason: str = None):
 async def toggle_tts(ctx, state: str = None):
     global tts_enabled
 
-    if ctx.author.name.lower() == DONOVAN_USERNAME.lower():
+    if is_donovan(ctx.author):
         await ctx.send("Lmao no. You don't get a say in this, Donovan.")
         return
 
