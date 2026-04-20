@@ -388,6 +388,18 @@ async def on_message(message):
     await bot.process_commands(message)
 
 
+@bot.command(name="Commands")
+async def commands_list(ctx):
+    await ctx.send(
+        "**📋 Donovan Hate Bot — Commands**\n\n"
+        "**`@Donovan Hate Bot`** — Roasts Donovan. Ask it a question for a smart response.\n"
+        "**`!Trial <reason>`** — Puts Donovan on trial. Server votes guilty/not guilty for 60 seconds, bot sentences him.\n"
+        "**`!Guesswhosaidit`** — 3 round game. Guess if the quote was Donovan or someone else. 30 seconds per round.\n"
+        "**`!TTS on/off`** — Toggles voice channel roasts on or off. (Donovan cannot use this.)\n"
+        "**`!Commands`** — Shows this list.\n"
+    )
+
+
 @bot.command(name="Guesswhosaidit")
 async def guess_who(ctx):
     global guess_game_active
