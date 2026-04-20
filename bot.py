@@ -58,7 +58,7 @@ SHOP_ITEMS = {
     "laugh_track": {
         "name": "Laugh Track",
         "cost": 90,
-        "description": "Next roast is followed by 😂 spam from the bot",
+        "description": "Next roast is followed by 😂 spam from the HateBot",
     },
     "double_roast": {
         "name": "Double Roast",
@@ -83,12 +83,12 @@ SHOP_ITEMS = {
     "mega_roast": {
         "name": "Mega Roast",
         "cost": 200,
-        "description": "Your next @mention also triggers an AI-generated extra savage bonus roast",
+        "description": "Your next @mention also triggers an extra savage bonus roast",
     },
     "press_release": {
         "name": "Press Release",
         "cost": 225,
-        "description": "AI generates a fake formal press release announcing his latest L",
+        "description": "HateBot a fake formal press release announcing his latest L",
     },
     "hall_of_shame": {
         "name": "Hall of Shame",
@@ -98,17 +98,17 @@ SHOP_ITEMS = {
     "breaking_news": {
         "name": "Breaking News",
         "cost": 250,
-        "description": "Bot posts a fake breaking news alert about him",
+        "description": "HateBot posts a fake breaking news alert about him",
     },
     "intervention": {
         "name": "Intervention",
         "cost": 275,
-        "description": "Bot @everyone and announces a formal server intervention for his behavior",
+        "description": "HateBot @everyone and announces a formal server intervention for his behavior",
     },
     "scorched_earth": {
         "name": "Scorched Earth",
         "cost": 300,
-        "description": "AI generates 3 different unique roasts back to back",
+        "description": "HateBot Generates 3 different unique roasts back to back",
     },
     "bounty_boost": {
         "name": "Bounty Boost",
@@ -123,12 +123,12 @@ SHOP_ITEMS = {
     "lore_drop": {
         "name": "Lore Drop",
         "cost": 400,
-        "description": "AI generates a full absurd origin story for why Donovan is the way he is",
+        "description": "HateBot generates a full absurd origin story for why Donovan is the way he is",
     },
     "nuclear": {
         "name": "Nuclear",
         "cost": 500,
-        "description": "Maximum AI roast + forces TTS even if it's off",
+        "description": "Maximum Hatebot roast + forces TTS even if it's off",
     },
 }
 
