@@ -215,6 +215,61 @@ def load_count():
     return 0
 
 
+DONOVAN_STOCK_BASE = 100.0
+USER_STOCK_BASE = 10.0
+
+
+def get_stocks():
+    eco = load_economy()
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    return eco.get("stocks", {
+        "donovan": {"price": DONOVAN_STOCK_BASE, "prev_price": DONOVAN_STOCK_BASE, "last_updated": now},
+        "users": {},
+    })
+
+
+def save_stocks(stocks):
+    eco = load_economy()
+    eco["stocks"] = stocks
+    save_economy(eco)
+
+
+def get_display_prices(stocks):
+    """Apply time-based drift without persisting — Donovan recovers slowly, users decay slowly."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    don = stocks["donovan"]
+    hours = (now - datetime.datetime.fromisoformat(don["last_updated"])).total_seconds() / 3600
+    don_price = min(don["price"] + hours * 0.25, DONOVAN_STOCK_BASE)
+
+    user_prices = {}
+    for uid, data in stocks.get("users", {}).items():
+        hours = (now - datetime.datetime.fromisoformat(data["last_updated"])).total_seconds() / 3600
+        user_prices[uid] = max(data["price"] - hours * 0.1, 1.0)
+
+    return round(don_price, 2), {k: round(v, 2) for k, v in user_prices.items()}
+
+
+def update_stocks_on_roast(user_id):
+    stocks = get_stocks()
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+    drop = round(random.uniform(1.5, 3.5), 2)
+    stocks["donovan"]["prev_price"] = stocks["donovan"]["price"]
+    stocks["donovan"]["price"] = max(round(stocks["donovan"]["price"] - drop, 2), 0.01)
+    stocks["donovan"]["last_updated"] = now
+
+    uid = str(user_id)
+    if uid not in stocks.setdefault("users", {}):
+        stocks["users"][uid] = {"price": USER_STOCK_BASE, "prev_price": USER_STOCK_BASE, "last_updated": now}
+    gain = round(random.uniform(0.5, 2.0), 2)
+    stocks["users"][uid]["prev_price"] = stocks["users"][uid]["price"]
+    stocks["users"][uid]["price"] = round(stocks["users"][uid]["price"] + gain, 2)
+    stocks["users"][uid]["last_updated"] = now
+
+    save_stocks(stocks)
+
+
 def save_count(count):
     with open(COUNTER_FILE, "w") as f:
         json.dump({"count": count}, f)
@@ -580,6 +635,7 @@ async def on_message(message):
                         await message.channel.send("⛔ Exile failed — bot needs Moderate Members permission.")
 
             add_coins(message.author.id, 10)
+            update_stocks_on_roast(message.author.id)
             bounty_total = claim_bounties(message.author.id)
             if bounty_total > 0:
                 add_coins(message.author.id, bounty_total)
@@ -597,6 +653,39 @@ async def on_message(message):
             await message.channel.send(random.choice(GENERAL_ROASTS))
 
     await bot.process_commands(message)
+
+
+@bot.command(name="stockmarket")
+async def stock_market(ctx):
+    stocks = get_stocks()
+    don_price, user_prices = get_display_prices(stocks)
+
+    don_prev = stocks["donovan"].get("prev_price", DONOVAN_STOCK_BASE)
+    don_change = round(don_price - don_prev, 2)
+    don_pct = round((don_change / don_prev * 100) if don_prev else 0, 1)
+    don_trend = "📉" if don_change < 0 else "📈"
+
+    lines = [
+        "📊 **DONOVAN STOCK EXCHANGE**\n",
+        f"**$DONOVAN** — ${don_price:.2f}   {don_trend} {don_change:+.2f} ({don_pct:+.1f}%)",
+        f"_The lower it goes the better for all of us._\n",
+    ]
+
+    if user_prices:
+        top = sorted(user_prices.items(), key=lambda x: x[1], reverse=True)[:5]
+        lines.append("**Top Roasters:**")
+        for uid, price in top:
+            member = ctx.guild.get_member(int(uid))
+            name = (member.display_name if member else "Unknown").upper()[:10]
+            prev = stocks["users"].get(uid, {}).get("prev_price", USER_STOCK_BASE)
+            change = round(price - prev, 2)
+            pct = round((change / prev * 100) if prev else 0, 1)
+            trend = "📈" if change >= 0 else "📉"
+            lines.append(f"**${name}** — ${price:.2f}   {trend} {change:+.2f} ({pct:+.1f}%)")
+    else:
+        lines.append("_No roasters on the board yet. Start roasting to get listed._")
+
+    await ctx.send("\n".join(lines))
 
 
 @bot.command(name="Commands")
@@ -620,6 +709,7 @@ async def commands_list(ctx):
         "**`!give @user <amount>`** — Transfer coins to another member.\n"
         "**`!blackmarket`** — View peer-to-peer upgrade listings.\n"
         "**`!listitem <item> <price>`** — List an owned upgrade for sale.\n"
+        "**`!stockmarket`** — View Donovan's tanking stock price and top roaster rankings.\n"
         "**`!buyitem <id>`** — Buy an upgrade from the black market.\n\n"
         "**`!Commands`** — Shows this list.\n"
     )
