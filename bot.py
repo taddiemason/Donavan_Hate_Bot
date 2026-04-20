@@ -33,6 +33,17 @@ VOICE_CHANNEL_ID = int(os.getenv("VOICE_CHANNEL_ID", 0))
 
 tts_enabled = True
 tts_queue = asyncio.Queue()
+trial_active = False
+
+SENTENCES = [
+    "Donovan is sentenced to a lifetime of being himself — the cruelest punishment this court can impose.",
+    "Donovan is hereby sentenced to 10 years of mandatory grass-touching, effective immediately.",
+    "The court sentences Donovan to a permanent ban from Big Mac meals and all associated large women.",
+    "Donovan is sentenced to listen to his own opinions on repeat for eternity. God help him.",
+    "By the power vested in this bot, Donovan is sentenced to public humiliation every day until further notice. Court adjourned.",
+    "Donovan is sentenced to 500 hours of community service, specifically apologizing to everyone who has ever had to interact with him.",
+    "The court finds no punishment severe enough, so Donovan is sentenced to simply continue being Donovan. Brutal.",
+]
 
 MONDAY_ROASTS = [
     "Happy Monday everyone! Unfortunately Donovan is still here to ruin your week. Stay strong.",
@@ -355,6 +366,66 @@ async def on_message(message):
             await message.channel.send(random.choice(GENERAL_ROASTS))
 
     await bot.process_commands(message)
+
+
+@bot.command(name="Trial")
+async def trial(ctx, *, reason: str = None):
+    global trial_active
+
+    if ctx.author.name.lower() == DONOVAN_USERNAME.lower():
+        await ctx.send("You can't put yourself on trial Donovan. Though honestly you should.")
+        return
+
+    if trial_active:
+        await ctx.send("A trial is already in progress. Donovan can only be humiliated one case at a time.")
+        return
+
+    if not reason:
+        await ctx.send("You need to provide a charge. Usage: `!Trial <reason>`")
+        return
+
+    trial_active = True
+    try:
+        msg = await ctx.send(
+            f"⚖️ **THE PEOPLE VS. DONOVAN** ⚖️\n\n"
+            f"**Charge:** {reason}\n\n"
+            f"Cast your vote:\n"
+            f"👨‍⚖️ = GUILTY\n"
+            f"🆓 = NOT GUILTY\n\n"
+            f"_Voting closes in 60 seconds._"
+        )
+        await msg.add_reaction("👨‍⚖️")
+        await msg.add_reaction("🆓")
+
+        await asyncio.sleep(60)
+
+        msg = await ctx.channel.fetch_message(msg.id)
+        guilty = 0
+        not_guilty = 0
+        for reaction in msg.reactions:
+            if str(reaction.emoji) == "👨‍⚖️":
+                guilty = reaction.count - 1
+            elif str(reaction.emoji) == "🆓":
+                not_guilty = reaction.count - 1
+
+        if guilty >= not_guilty:
+            sentence = random.choice(SENTENCES)
+            await ctx.send(
+                f"⚖️ **VERDICT: GUILTY** ⚖️\n"
+                f"_{guilty} guilty — {not_guilty} not guilty_\n\n"
+                f"**Sentence:** {sentence}"
+            )
+        else:
+            await ctx.send(
+                f"⚖️ **VERDICT: NOT GUILTY** ⚖️\n"
+                f"_{not_guilty} not guilty — {guilty} guilty_\n\n"
+                f"Donovan walks free today. Don't worry, he'll embarrass himself again soon enough."
+            )
+    except Exception as e:
+        print(f"[ERROR] Trial failed: {e}")
+        await ctx.send("The trial collapsed due to Donovan's overwhelming incompetence. Court dismissed.")
+    finally:
+        trial_active = False
 
 
 @bot.command(name="TTS")
