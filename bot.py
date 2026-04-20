@@ -45,6 +45,56 @@ SHOP_ITEMS = {
         "cost": 200,
         "description": "Your next @mention also triggers an AI-generated extra savage bonus roast",
     },
+    "shame_bell": {
+        "name": "Shame Bell",
+        "cost": 50,
+        "description": "Next roast comes with a 🔔 SHAME 🔔 announcement",
+    },
+    "snitch": {
+        "name": "Snitch",
+        "cost": 75,
+        "description": "Next roast also gets DMed directly to Donovan",
+    },
+    "triple_roast": {
+        "name": "Triple Roast",
+        "cost": 125,
+        "description": "Next roast fires THREE times in a row",
+    },
+    "anonymous": {
+        "name": "Anonymous",
+        "cost": 150,
+        "description": "Next roast is delivered as an anonymous tip",
+    },
+    "spotlight": {
+        "name": "Spotlight",
+        "cost": 175,
+        "description": "Next roast pings @here so nobody misses it",
+    },
+    "hall_of_shame": {
+        "name": "Hall of Shame",
+        "cost": 250,
+        "description": "Next roast gets pinned in the channel permanently",
+    },
+    "scorched_earth": {
+        "name": "Scorched Earth",
+        "cost": 300,
+        "description": "AI generates 3 different unique roasts back to back",
+    },
+    "bounty_boost": {
+        "name": "Bounty Boost",
+        "cost": 350,
+        "description": "Your next bounty claim pays out double",
+    },
+    "exile": {
+        "name": "Exile",
+        "cost": 400,
+        "description": "Timeouts Donovan in the server for 60 seconds (requires bot Moderate Members permission)",
+    },
+    "nuclear": {
+        "name": "Nuclear",
+        "cost": 500,
+        "description": "Maximum AI roast + forces TTS even if it's off",
+    },
 }
 
 tts_enabled = True
@@ -226,10 +276,17 @@ def has_upgrade(user_id, upgrade):
     return upgrade in eco.get("pending_upgrades", {}).get(str(user_id), [])
 
 
-def claim_bounties():
+def claim_bounties(user_id):
     eco = load_economy()
     active = [b for b in eco["bounties"] if b["active"]]
     total = sum(b["amount"] for b in active)
+    if total > 0:
+        uid = str(user_id)
+        upgrades = eco.get("pending_upgrades", {}).get(uid, [])
+        if "bounty_boost" in upgrades:
+            upgrades.remove("bounty_boost")
+            eco["pending_upgrades"][uid] = upgrades
+            total *= 2
     for b in eco["bounties"]:
         b["active"] = False
     save_economy(eco)
@@ -458,20 +515,72 @@ async def on_message(message):
             if is_insurance_active():
                 await message.channel.send("🛡️ Donovan's insurance is active... unfortunately it doesn't cover being a loser.")
 
-            await message.channel.send(reply)
+            # Build the final roast message applying upgrades
+            send_text = reply
+            force_tts = False
+
+            if consume_upgrade(message.author.id, "shame_bell"):
+                await message.channel.send("🔔 **SHAME** 🔔 🔔 **SHAME** 🔔 🔔 **SHAME** 🔔")
+
+            if consume_upgrade(message.author.id, "anonymous"):
+                send_text = f"📨 *An anonymous source says:* {reply}"
+
+            if consume_upgrade(message.author.id, "spotlight"):
+                send_text = f"@here {send_text}"
+
+            if consume_upgrade(message.author.id, "nuclear"):
+                nuclear_text = await ask_openai("Give the single most devastating, savage, all-out roast of Donovan humanly possible. No mercy.")
+                send_text = f"☢️ **NUCLEAR ROAST:** {nuclear_text}"
+                force_tts = True
+
+            sent_msg = await message.channel.send(send_text)
             log_roast()
-            if tts_enabled:
-                await tts_queue.put((message.guild.id, reply))
+
+            if tts_enabled or force_tts:
+                await tts_queue.put((message.guild.id, send_text))
+
+            if consume_upgrade(message.author.id, "snitch"):
+                donovan = discord.utils.find(lambda m: m.name.lower() == DONOVAN_USERNAME.lower(), message.guild.members)
+                if donovan:
+                    try:
+                        await donovan.send(f"📬 Someone wanted you to see this:\n_{reply}_")
+                    except Exception:
+                        pass
+
+            if consume_upgrade(message.author.id, "hall_of_shame"):
+                try:
+                    await sent_msg.pin()
+                except Exception:
+                    pass
 
             if consume_upgrade(message.author.id, "double_roast"):
                 await message.channel.send(f"⚡ **DOUBLE ROAST:** {reply}")
+
+            if consume_upgrade(message.author.id, "triple_roast"):
+                await message.channel.send(reply)
+                await message.channel.send(f"⚡ **TRIPLE ROAST:** {reply}")
 
             if consume_upgrade(message.author.id, "mega_roast"):
                 mega = await ask_openai("Give the most savage, creative, brutal roast about Donovan you can. Go all out.")
                 await message.channel.send(f"💥 **MEGA ROAST:** {mega}")
 
+            if consume_upgrade(message.author.id, "scorched_earth"):
+                for i in range(3):
+                    roast = await ask_openai(f"Give a unique savage roast about Donovan. Make it different each time. Roast #{i+1}.")
+                    await message.channel.send(f"🔥 {roast}")
+
+            if consume_upgrade(message.author.id, "exile"):
+                donovan = discord.utils.find(lambda m: m.name.lower() == DONOVAN_USERNAME.lower(), message.guild.members)
+                if donovan:
+                    try:
+                        until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=60)
+                        await donovan.timeout(until, reason="Exile purchased by the people.")
+                        await message.channel.send("⛔ Donovan has been exiled for 60 seconds. Enjoy the peace.")
+                    except Exception:
+                        await message.channel.send("⛔ Exile failed — bot needs Moderate Members permission.")
+
             add_coins(message.author.id, 10)
-            bounty_total = claim_bounties()
+            bounty_total = claim_bounties(message.author.id)
             if bounty_total > 0:
                 add_coins(message.author.id, bounty_total)
                 await message.channel.send(f"💰 {message.author.mention} collected **{bounty_total} Roast Coins** in active bounties!")
