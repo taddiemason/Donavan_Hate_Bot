@@ -34,6 +34,26 @@ VOICE_CHANNEL_ID = int(os.getenv("VOICE_CHANNEL_ID", 0))
 tts_enabled = True
 tts_queue = asyncio.Queue()
 trial_active = False
+guess_game_active = False
+
+QUOTES = [
+    {"text": "Big Macs are honestly underrated and I will die on this hill.", "is_donovan": True},
+    {"text": "I would win at Rust if people just stopped killing me.", "is_donovan": True},
+    {"text": "I'm not saying I'm the smartest person in the room, I'm just saying everyone else is dumb.", "is_donovan": True},
+    {"text": "She was a big girl but she had a great personality.", "is_donovan": True},
+    {"text": "Bro I was top fragging until my internet cut out.", "is_donovan": True},
+    {"text": "I don't have daddy issues I just don't like authority.", "is_donovan": True},
+    {"text": "The McDouble is actually a better value than the Big Mac and I'll prove it.", "is_donovan": True},
+    {"text": "I could go pro if I actually tried.", "is_donovan": True},
+    {"text": "Be the change you wish to see in the world.", "is_donovan": False},
+    {"text": "The only way to do great work is to love what you do.", "is_donovan": False},
+    {"text": "In the middle of every difficulty lies opportunity.", "is_donovan": False},
+    {"text": "It does not matter how slowly you go as long as you do not stop.", "is_donovan": False},
+    {"text": "Life is what happens when you're busy making other plans.", "is_donovan": False},
+    {"text": "The unexamined life is not worth living.", "is_donovan": False},
+    {"text": "To be yourself in a world that is constantly trying to make you something else is the greatest accomplishment.", "is_donovan": False},
+    {"text": "Two things are infinite: the universe and human stupidity.", "is_donovan": False},
+]
 
 SENTENCES = [
     "Donovan is sentenced to a lifetime of being himself — the cruelest punishment this court can impose.",
@@ -366,6 +386,80 @@ async def on_message(message):
             await message.channel.send(random.choice(GENERAL_ROASTS))
 
     await bot.process_commands(message)
+
+
+@bot.command(name="Guesswhosaidit")
+async def guess_who(ctx):
+    global guess_game_active
+
+    if ctx.author.name.lower() == DONOVAN_USERNAME.lower():
+        await ctx.send("You're not allowed to play this game Donovan. You might recognise yourself.")
+        return
+
+    if guess_game_active:
+        await ctx.send("A game is already running. One humiliation at a time.")
+        return
+
+    guess_game_active = True
+    scores = {}
+    pool = random.sample(QUOTES, min(3, len(QUOTES)))
+
+    try:
+        await ctx.send("🎮 **GUESS WHO SAID IT** 🎮\n3 rounds, 30 seconds each.\nReact 🇩 if you think **Donovan** said it, 🤷 if **someone else** did.")
+
+        for round_num, quote in enumerate(pool, 1):
+            msg = await ctx.send(
+                f"**Round {round_num}/3**\n\n"
+                f'*"{quote["text"]}"*\n\n'
+                f"🇩 = Donovan    🤷 = Not Donovan"
+            )
+            await msg.add_reaction("🇩")
+            await msg.add_reaction("🤷")
+
+            await asyncio.sleep(30)
+
+            msg = await ctx.channel.fetch_message(msg.id)
+            donovan_voters = set()
+            not_donovan_voters = set()
+
+            for reaction in msg.reactions:
+                async for user in reaction.users():
+                    if user.bot:
+                        continue
+                    if str(reaction.emoji) == "🇩":
+                        donovan_voters.add(user.id)
+                    elif str(reaction.emoji) == "🤷":
+                        not_donovan_voters.add(user.id)
+
+            correct_voters = donovan_voters if quote["is_donovan"] else not_donovan_voters
+            for uid in correct_voters:
+                scores[uid] = scores.get(uid, 0) + 1
+
+            answer = "**DONOVAN** said that. Shocking." if quote["is_donovan"] else "A normal human said that. Donovan could never."
+            correct_count = len(correct_voters)
+            await ctx.send(f"⏱️ Time's up! {answer}\n✅ {correct_count} people got it right.")
+
+        if scores:
+            sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+            winner_id, top_score = sorted_scores[0]
+            winner = ctx.guild.get_member(winner_id)
+            winner_name = winner.display_name if winner else "Someone"
+            board = "\n".join(
+                f"{ctx.guild.get_member(uid).display_name if ctx.guild.get_member(uid) else 'Unknown'}: {s}/3"
+                for uid, s in sorted_scores
+            )
+            await ctx.send(
+                f"🏆 **GAME OVER**\n\n{board}\n\n"
+                f"Winner: **{winner_name}** with {top_score}/3 — the only one here who truly understands how big of a loser Donovan is."
+            )
+        else:
+            await ctx.send("🏆 **GAME OVER**\nNobody scored a single point. Donovan would fit right in.")
+
+    except Exception as e:
+        print(f"[ERROR] Guess game failed: {e}")
+        await ctx.send("The game crashed. Blame Donovan.")
+    finally:
+        guess_game_active = False
 
 
 @bot.command(name="Trial")
