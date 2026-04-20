@@ -2,6 +2,7 @@ import os
 import json
 import random
 import datetime
+from zoneinfo import ZoneInfo
 import discord
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
@@ -176,7 +177,7 @@ async def is_hot_take(text):
         return False
 
 
-@tasks.loop(time=datetime.time(hour=21, minute=0, tzinfo=datetime.timezone.utc))
+@tasks.loop(time=datetime.time(hour=21, minute=0, tzinfo=ZoneInfo("America/New_York")))
 async def weekly_recap():
     if not ROAST_CHANNEL_ID:
         return
@@ -202,7 +203,7 @@ async def weekly_recap():
 
     busiest_day = day_names[day_counts.index(max(day_counts))]
     busiest_hour = hour_counts.index(max(hour_counts))
-    hour_label = datetime.time(hour=busiest_hour).strftime("%-I %p")
+    hour_label = datetime.datetime(2000, 1, 1, busiest_hour).strftime("%I %p").lstrip("0")
 
     await channel.send(
         f"📊 **Weekly Roast Recap**\n"
@@ -213,7 +214,7 @@ async def weekly_recap():
     )
 
 
-@tasks.loop(time=datetime.time(hour=9, minute=0, tzinfo=datetime.timezone.utc))
+@tasks.loop(time=datetime.time(hour=9, minute=0, tzinfo=ZoneInfo("America/New_York")))
 async def scheduled_roast():
     if not ROAST_CHANNEL_ID:
         return
