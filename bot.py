@@ -21,6 +21,7 @@ groq_client = AsyncOpenAI(
 )
 
 COUNTER_FILE = "roast_count.json"
+ROAST_LOG_FILE = "roast_log.json"
 MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
 DONOVAN_USERNAME = "itsrebrand"
 ROAST_CHANNEL_ID = int(os.getenv("ROAST_CHANNEL_ID", 0))
@@ -78,6 +79,28 @@ GENERAL_ROASTS = [
     "Donovan is a pussy",
     "Donovan has burger wrappers stuck to his ass",
 ]
+
+
+def log_roast():
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    if os.path.exists(ROAST_LOG_FILE):
+        with open(ROAST_LOG_FILE, "r") as f:
+            log = json.load(f)
+    else:
+        log = []
+    log.append(now)
+    with open(ROAST_LOG_FILE, "w") as f:
+        json.dump(log, f)
+
+
+def get_weekly_recap():
+    if not os.path.exists(ROAST_LOG_FILE):
+        return None, []
+    with open(ROAST_LOG_FILE, "r") as f:
+        log = json.load(f)
+    with open(ROAST_LOG_FILE, "w") as f:
+        json.dump([], f)
+    return len(log), log
 
 
 def load_count():
@@ -153,6 +176,43 @@ async def is_hot_take(text):
         return False
 
 
+@tasks.loop(time=datetime.time(hour=21, minute=0, tzinfo=datetime.timezone.utc))
+async def weekly_recap():
+    if not ROAST_CHANNEL_ID:
+        return
+    today = datetime.datetime.now(datetime.timezone.utc).weekday()
+    if today != 6:  # Sunday only
+        return
+    channel = bot.get_channel(ROAST_CHANNEL_ID)
+    if not channel:
+        return
+
+    total, log = get_weekly_recap()
+    if not total:
+        await channel.send("📊 **Weekly Roast Recap**\nDonovan somehow avoided getting roasted this week. Suspicious.")
+        return
+
+    day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    day_counts = [0] * 7
+    hour_counts = [0] * 24
+    for ts in log:
+        dt = datetime.datetime.fromisoformat(ts)
+        day_counts[dt.weekday()] += 1
+        hour_counts[dt.hour] += 1
+
+    busiest_day = day_names[day_counts.index(max(day_counts))]
+    busiest_hour = hour_counts.index(max(hour_counts))
+    hour_label = datetime.time(hour=busiest_hour).strftime("%-I %p")
+
+    await channel.send(
+        f"📊 **Weekly Roast Recap**\n"
+        f"Donovan got roasted **{total} times** this week. Impressive dedication everyone.\n\n"
+        f"🏆 Most active day: **{busiest_day}**\n"
+        f"⏰ Peak roast hour: **{hour_label} UTC**\n\n"
+        f"See you all next week for more Donovan disrespect."
+    )
+
+
 @tasks.loop(time=datetime.time(hour=9, minute=0, tzinfo=datetime.timezone.utc))
 async def scheduled_roast():
     if not ROAST_CHANNEL_ID:
@@ -171,6 +231,7 @@ async def scheduled_roast():
 async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
     scheduled_roast.start()
+    weekly_recap.start()
 
 
 @bot.event
@@ -220,6 +281,7 @@ async def on_message(message):
 
             print(f"[DEBUG] Sending reply: '{reply}'")
             await message.channel.send(reply)
+            log_roast()
 
             count = load_count() + 1
             save_count(count)
