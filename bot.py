@@ -31,6 +31,7 @@ DONOVAN_USERNAME = "itsrebrand"
 ROAST_CHANNEL_ID = int(os.getenv("ROAST_CHANNEL_ID", 0))
 VOICE_CHANNEL_ID = int(os.getenv("VOICE_CHANNEL_ID", 0))
 
+tts_enabled = True
 tts_queue = asyncio.Queue()
 
 MONDAY_ROASTS = [
@@ -339,7 +340,8 @@ async def on_message(message):
             print(f"[DEBUG] Sending reply: '{reply}'")
             await message.channel.send(reply)
             log_roast()
-            await tts_queue.put((message.guild.id, reply))
+            if tts_enabled:
+                await tts_queue.put((message.guild.id, reply))
 
             count = load_count() + 1
             save_count(count)
@@ -353,6 +355,22 @@ async def on_message(message):
             await message.channel.send(random.choice(GENERAL_ROASTS))
 
     await bot.process_commands(message)
+
+
+@bot.command(name="TTS")
+async def toggle_tts(ctx, state: str = None):
+    global tts_enabled
+
+    if ctx.author.name.lower() == DONOVAN_USERNAME.lower():
+        await ctx.send("Lmao no. You don't get a say in this, Donovan.")
+        return
+
+    if state is None or state.lower() not in ("on", "off"):
+        await ctx.send(f"TTS is currently **{'on' if tts_enabled else 'off'}**. Use `!TTS on` or `!TTS off`.")
+        return
+
+    tts_enabled = state.lower() == "on"
+    await ctx.send(f"TTS roasts turned **{state.lower()}**.")
 
 
 bot.run(os.getenv("DISCORD_TOKEN"))
