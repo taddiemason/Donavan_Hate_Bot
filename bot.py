@@ -136,6 +136,33 @@ tts_enabled = True
 tts_queue = asyncio.Queue()
 trial_active = False
 guess_game_active = False
+trivia_active = False
+trivia_answer = None
+guessroast_active = False
+highlow_games = {}
+
+SLOT_SYMBOLS = ["🍋", "🍒", "🍇", "💎", "🎰", "7️⃣"]
+SLOT_PAYOUTS = {("7️⃣", "7️⃣", "7️⃣"): 50, ("💎", "💎", "💎"): 25, ("🎰", "🎰", "🎰"): 15}
+
+SERVER_ROAST_MILESTONES = {100: 50, 250: 75, 500: 100, 1000: 200, 2500: 300, 5000: 500}
+
+TRIVIA_QUESTIONS = [
+    {"q": "What fast food item does Donovan famously defend as underrated?", "a": "big mac"},
+    {"q": "What game does Donovan always blame his deaths on?", "a": "rust"},
+    {"q": "What is always stuck to Donovan's ass?", "a": "burger wrappers"},
+    {"q": "What is the capital of France?", "a": "paris"},
+    {"q": "How many sides does a hexagon have?", "a": "6"},
+    {"q": "What year did the first iPhone launch?", "a": "2007"},
+    {"q": "What planet is known as the Red Planet?", "a": "mars"},
+    {"q": "What is the chemical symbol for gold?", "a": "au"},
+    {"q": "How many players are on a basketball team on the court at once?", "a": "5"},
+    {"q": "What is the largest ocean on Earth?", "a": "pacific"},
+    {"q": "What year did World of Warcraft originally launch?", "a": "2004"},
+    {"q": "How many strings does a standard guitar have?", "a": "6"},
+    {"q": "What is 7 multiplied by 8?", "a": "56"},
+    {"q": "What country is home to the kangaroo?", "a": "australia"},
+    {"q": "What is the hardest natural substance on Earth?", "a": "diamond"},
+]
 
 QUOTES = [
     {"text": "Big Macs are honestly underrated and I will die on this hill.", "is_donovan": True},
@@ -384,6 +411,18 @@ def claim_bounties(user_id):
     return total
 
 
+def is_double_coin_day():
+    day = datetime.datetime.now(ZoneInfo("America/New_York")).weekday()
+    return day in (4, 5, 6)  # Friday, Saturday, Sunday
+
+
+def get_daily_reward(streak):
+    base = 25 + (min(streak, 30) - 1) * 5
+    if streak % 7 == 0:
+        base *= 2
+    return base
+
+
 def get_donovan_activity(guild):
     member = discord.utils.find(
         lambda m: m.name.lower() == DONOVAN_USERNAME.lower(), guild.members
@@ -530,6 +569,32 @@ async def weekly_recap():
         f"See you all next week for more Donovan disrespect."
     )
 
+    # Weekly lottery drawing
+    eco = load_economy()
+    tickets = eco.get("lottery_tickets", {})
+    pot = eco.get("lottery_pot", 0)
+    if tickets and pot > 0:
+        pool = []
+        for uid, count in tickets.items():
+            pool.extend([uid] * count)
+        winner_id = random.choice(pool)
+        winner = channel.guild.get_member(int(winner_id))
+        winner_name = winner.display_name if winner else "Someone"
+        add_coins(int(winner_id), pot)
+        eco["lottery_tickets"] = {}
+        eco["lottery_pot"] = 0
+        save_economy(eco)
+        await channel.send(
+            f"🎟️ **WEEKLY LOTTERY DRAWING!**\n\n"
+            f"Out of {len(pool)} tickets...\n"
+            f"🏆 **{winner_name}** wins the **{pot} coin** pot!\n"
+            f"New lottery starts now. Buy tickets with `!lottery <amount>`."
+        )
+    else:
+        eco["lottery_tickets"] = {}
+        eco["lottery_pot"] = 0
+        save_economy(eco)
+
 
 @tasks.loop(time=datetime.time(hour=9, minute=0, tzinfo=ZoneInfo("America/New_York")))
 async def scheduled_roast():
@@ -563,6 +628,56 @@ async def on_message(message):
     print(f"[DEBUG] Any message received: {message.author} - {message.content[:50]}")
     if message.author == bot.user:
         return
+
+    # First message of the day bonus
+    today = datetime.date.today().isoformat()
+    eco = load_economy()
+    if eco.get("first_message_today") != today:
+        eco["first_message_today"] = today
+        save_economy(eco)
+        bonus = 30 if is_double_coin_day() else 15
+        add_coins(message.author.id, bonus)
+        await message.channel.send(f"🌅 {message.author.mention} sent the first message of the day! **+{bonus} coins!**")
+
+    # Higher or lower game responses
+    if message.author.id in highlow_games:
+        game = highlow_games[message.author.id]
+        if message.channel.id == game["channel_id"]:
+            content = message.content.lower().strip()
+            if content in ("higher", "lower"):
+                new_num = random.randint(1, 100)
+                old_num = game["number"]
+                correct = (content == "higher" and new_num > old_num) or (content == "lower" and new_num < old_num)
+                if new_num == old_num:
+                    await message.channel.send(f"🎯 It's **{new_num}** — a tie! Keep going.")
+                elif correct:
+                    game["multiplier"] += 1
+                    game["number"] = new_num
+                    await message.channel.send(f"✅ **{new_num}!** Correct! Multiplier: **{game['multiplier']}x** — type `higher`, `lower`, or `cashout`.")
+                else:
+                    bet = game["bet"]
+                    del highlow_games[message.author.id]
+                    await message.channel.send(f"❌ **{new_num}!** Wrong! You lost **{bet} coins**.")
+            elif content == "cashout":
+                winnings = game["bet"] * game["multiplier"]
+                add_coins(message.author.id, winnings)
+                del highlow_games[message.author.id]
+                await message.channel.send(f"💰 Cashed out at **{game['multiplier']}x**! You won **{winnings} coins**!")
+
+    # Trivia answer check
+    if trivia_active and trivia_answer and not message.author.bot:
+        if trivia_answer.lower() in message.content.lower():
+            globals()["trivia_active"] = False
+            reward = 50
+            add_coins(message.author.id, reward)
+            await message.channel.send(f"✅ {message.author.mention} got it! The answer was **{trivia_answer}**. **+{reward} coins!**")
+
+    # Guess the roast answer check
+    if guessroast_active and not message.author.bot:
+        if "donovan" in message.content.lower():
+            globals()["guessroast_active"] = False
+            add_coins(message.author.id, 30)
+            await message.channel.send(f"✅ {message.author.mention} got it! It was **Donovan** (obviously). **+30 coins!**")
 
     bot_member = message.guild.get_member(bot.user.id)
     bot_mentioned = bot.user in message.mentions or (
@@ -703,7 +818,10 @@ async def on_message(message):
                     except Exception:
                         await message.channel.send("⛔ Exile failed — bot needs Moderate Members permission.")
 
-            add_coins(message.author.id, 10)
+            coin_reward = 20 if is_double_coin_day() else 10
+            if is_double_coin_day():
+                await message.channel.send("💰 **2x Roast Coins** — Fuck Donovan Friday/Weekend bonus active!")
+            add_coins(message.author.id, coin_reward)
             update_stocks_on_roast(message.author.id)
             bounty_total = claim_bounties(message.author.id)
             if bounty_total > 0:
@@ -717,11 +835,172 @@ async def on_message(message):
                 await message.channel.send(
                     f"Congratulations Donovan, you've been insulted {count} times. Keep up the great work!"
                 )
+
+            eco = load_economy()
+            milestones_given = eco.get("server_milestones_given", [])
+            if count in SERVER_ROAST_MILESTONES and count not in milestones_given:
+                milestones_given.append(count)
+                eco["server_milestones_given"] = milestones_given
+                save_economy(eco)
+                bonus = SERVER_ROAST_MILESTONES[count]
+                for member in message.guild.members:
+                    if not member.bot:
+                        add_coins(member.id, bonus)
+                await message.channel.send(
+                    f"🎉 **SERVER MILESTONE: {count} total roasts!**\n"
+                    f"Everyone gets **+{bonus} Roast Coins** for their dedication to roasting Donovan!"
+                )
         except Exception as e:
             print(f"[ERROR] on_message crashed: {e}")
             await message.channel.send(random.choice(GENERAL_ROASTS))
 
     await bot.process_commands(message)
+
+
+@bot.command(name="daily")
+async def daily_checkin(ctx):
+    eco = load_economy()
+    uid = str(ctx.author.id)
+    today = datetime.date.today().isoformat()
+    yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+    data = eco.setdefault("daily_checkins", {}).get(uid, {"last_checkin": None, "streak": 0})
+
+    if data["last_checkin"] == today:
+        await ctx.send("You've already checked in today. Come back tomorrow.")
+        return
+
+    streak = data["streak"] + 1 if data["last_checkin"] == yesterday else 1
+    reward = get_daily_reward(streak)
+    if is_double_coin_day():
+        reward *= 2
+
+    eco["daily_checkins"][uid] = {"last_checkin": today, "streak": streak}
+    save_economy(eco)
+    add_coins(ctx.author.id, reward)
+
+    streak_msg = f" 🔥 **{streak} day streak!**" if streak > 1 else ""
+    milestone_msg = " 🎉 **7-DAY BONUS — DOUBLED!**" if streak % 7 == 0 else ""
+    double_msg = " 💰 **Weekend 2x active!**" if is_double_coin_day() else ""
+    await ctx.send(f"✅ Daily check-in! **+{reward} coins**{streak_msg}{milestone_msg}{double_msg}")
+
+
+@bot.command(name="flip")
+async def coinflip(ctx, amount: int = None, side: str = None):
+    if not amount or not side or side.lower() not in ("heads", "tails"):
+        await ctx.send("Usage: `!flip <amount> heads` or `!flip <amount> tails`")
+        return
+    if amount <= 0:
+        await ctx.send("Bet must be positive.")
+        return
+    if not spend_coins(ctx.author.id, amount):
+        bal = load_economy()["balances"].get(str(ctx.author.id), 0)
+        await ctx.send(f"Not enough coins. You have **{bal}**.")
+        return
+    result = random.choice(["heads", "tails"])
+    if result == side.lower():
+        add_coins(ctx.author.id, amount * 2)
+        await ctx.send(f"🪙 **{result.upper()}!** You won **{amount} coins!**")
+    else:
+        await ctx.send(f"🪙 **{result.upper()}!** You lost **{amount} coins**. Better luck next time.")
+
+
+@bot.command(name="slots")
+async def slots(ctx, amount: int = None):
+    if not amount or amount <= 0:
+        await ctx.send("Usage: `!slots <amount>`")
+        return
+    if not spend_coins(ctx.author.id, amount):
+        bal = load_economy()["balances"].get(str(ctx.author.id), 0)
+        await ctx.send(f"Not enough coins. You have **{bal}**.")
+        return
+    reels = [random.choice(SLOT_SYMBOLS) for _ in range(3)]
+    display = " | ".join(reels)
+    key = tuple(reels)
+    mult = SLOT_PAYOUTS.get(key, 0)
+    if mult == 0:
+        if reels[0] == reels[1] == reels[2]:
+            mult = 10
+        elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
+            mult = 2
+    if mult > 0:
+        winnings = amount * mult
+        add_coins(ctx.author.id, winnings)
+        await ctx.send(f"🎰 [ {display} ]\n**{mult}x PAYOUT!** You won **{winnings} coins!**")
+    else:
+        await ctx.send(f"🎰 [ {display} ]\nNo match. You lost **{amount} coins**.")
+
+
+@bot.command(name="trivia")
+async def trivia(ctx):
+    global trivia_active, trivia_answer
+    if trivia_active:
+        await ctx.send("A trivia question is already active!")
+        return
+    trivia_active = True
+    q = random.choice(TRIVIA_QUESTIONS)
+    trivia_answer = q["a"]
+    await ctx.send(f"🧠 **TRIVIA** — First to answer wins **50 coins!**\n\n_{q['q']}_\n\nYou have 30 seconds!")
+    await asyncio.sleep(30)
+    if trivia_active:
+        trivia_active = False
+        trivia_answer = None
+        await ctx.send(f"⏱️ Time's up! The answer was **{q['a']}**.")
+
+
+@bot.command(name="guessroast")
+async def guess_roast(ctx):
+    global guessroast_active
+    if guessroast_active:
+        await ctx.send("A guess the roast game is already active!")
+        return
+    guessroast_active = True
+    all_roasts = GENERAL_ROASTS + RUST_ROASTS + WOW_ROASTS
+    roast = random.choice(all_roasts)
+    blanked = roast.replace("Donovan", "**[???]**").replace("donovan", "**[???]**")
+    await ctx.send(f"🎭 **GUESS WHO THIS ROAST IS AIMED AT:**\n\n_{blanked}_\n\nFirst to type the name wins **30 coins!** (20 seconds)")
+    await asyncio.sleep(20)
+    if guessroast_active:
+        guessroast_active = False
+        await ctx.send("⏱️ Time's up! It was **Donovan**. Obviously.")
+
+
+@bot.command(name="highlow")
+async def highlow(ctx, amount: int = None):
+    if not amount or amount <= 0:
+        await ctx.send("Usage: `!highlow <amount>`")
+        return
+    if ctx.author.id in highlow_games:
+        await ctx.send("You already have a game in progress! Type `higher`, `lower`, or `cashout`.")
+        return
+    if not spend_coins(ctx.author.id, amount):
+        bal = load_economy()["balances"].get(str(ctx.author.id), 0)
+        await ctx.send(f"Not enough coins. You have **{bal}**.")
+        return
+    number = random.randint(1, 100)
+    highlow_games[ctx.author.id] = {"number": number, "bet": amount, "multiplier": 1, "channel_id": ctx.channel.id}
+    await ctx.send(f"🎯 The number is **{number}**.\nWill the next be `higher` or `lower`? Type your answer!\nType `cashout` to take your winnings at any time.")
+
+
+@bot.command(name="lottery")
+async def lottery(ctx, amount: int = None):
+    if not amount or amount < 10:
+        eco = load_economy()
+        pot = eco.get("lottery_pot", 0)
+        tickets = eco.get("lottery_tickets", {}).get(str(ctx.author.id), 0)
+        await ctx.send(f"🎟️ **Weekly Lottery** — 10 coins per ticket\nCurrent pot: **{pot} coins** | Your tickets: **{tickets}**\nUsage: `!lottery <amount>` (must be multiple of 10)")
+        return
+    tickets = amount // 10
+    cost = tickets * 10
+    if not spend_coins(ctx.author.id, cost):
+        bal = load_economy()["balances"].get(str(ctx.author.id), 0)
+        await ctx.send(f"Not enough coins. You have **{bal}**.")
+        return
+    eco = load_economy()
+    uid = str(ctx.author.id)
+    eco.setdefault("lottery_tickets", {})[uid] = eco.get("lottery_tickets", {}).get(uid, 0) + tickets
+    eco["lottery_pot"] = eco.get("lottery_pot", 0) + cost
+    save_economy(eco)
+    await ctx.send(f"🎟️ Bought **{tickets} ticket(s)** for **{cost} coins**! Pot is now **{eco['lottery_pot']} coins**. Drawing Sunday at 9 PM EST!")
 
 
 @bot.command(name="stockmarket")
@@ -779,6 +1058,14 @@ async def commands_list(ctx):
         "**`!blackmarket`** — View peer-to-peer upgrade listings.\n"
         "**`!listitem <item> <price>`** — List an owned upgrade for sale.\n"
         "**`!stockmarket`** — View Donovan's tanking stock price and top roaster rankings.\n"
+        "\n**🎮 Minigames & Rewards**\n"
+        "**`!daily`** — 25 coin daily check-in. Streak builds a multiplier, doubles at 7 days.\n"
+        "**`!flip <amount> heads/tails`** — Coinflip gamble.\n"
+        "**`!slots <amount>`** — Slot machine. Match symbols for big payouts.\n"
+        "**`!trivia`** — First to answer wins 50 coins.\n"
+        "**`!guessroast`** — Roast posted with name blanked, guess who it's about.\n"
+        "**`!highlow <amount>`** — Guess higher or lower, chain correct answers for a multiplier.\n"
+        "**`!lottery <amount>`** — Buy lottery tickets (10 coins each). Drawn every Sunday at 9 PM EST.\n"
         "**`!buyitem <id>`** — Buy an upgrade from the black market.\n\n"
         "**`!Commands`** — Shows this list.\n"
     )
