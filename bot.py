@@ -1,12 +1,15 @@
 import os
 import json
 import random
+import asyncio
+import tempfile
 import datetime
 from zoneinfo import ZoneInfo
 import discord
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
+from gtts import gTTS
 
 load_dotenv()
 
@@ -26,6 +29,9 @@ ROAST_LOG_FILE = "roast_log.json"
 MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
 DONOVAN_USERNAME = "itsrebrand"
 ROAST_CHANNEL_ID = int(os.getenv("ROAST_CHANNEL_ID", 0))
+VOICE_CHANNEL_ID = int(os.getenv("VOICE_CHANNEL_ID", 0))
+
+tts_queue = asyncio.Queue()
 
 MONDAY_ROASTS = [
     "Happy Monday everyone! Unfortunately Donovan is still here to ruin your week. Stay strong.",
@@ -177,6 +183,55 @@ async def is_hot_take(text):
         return False
 
 
+def get_donovan_voice_channel(guild):
+    member = discord.utils.find(
+        lambda m: m.name.lower() == DONOVAN_USERNAME.lower(), guild.members
+    )
+    if member and member.voice:
+        return member.voice.channel
+    if VOICE_CHANNEL_ID:
+        return bot.get_channel(VOICE_CHANNEL_ID)
+    return None
+
+
+async def tts_worker():
+    while True:
+        guild_id, text = await tts_queue.get()
+        tmp_path = None
+        try:
+            guild = bot.get_guild(guild_id)
+            if not guild:
+                continue
+
+            channel = get_donovan_voice_channel(guild)
+            if not channel:
+                continue
+
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                tmp_path = f.name
+            await asyncio.to_thread(gTTS(text=text, lang="en").save, tmp_path)
+
+            vc = guild.voice_client
+            if vc and vc.is_connected():
+                await vc.move_to(channel)
+            else:
+                vc = await channel.connect()
+
+            vc.play(discord.FFmpegPCMAudio(tmp_path))
+            while vc.is_playing():
+                await asyncio.sleep(0.5)
+
+            if tts_queue.empty():
+                await vc.disconnect()
+
+        except Exception as e:
+            print(f"[ERROR] TTS worker failed: {e}")
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            tts_queue.task_done()
+
+
 @tasks.loop(time=datetime.time(hour=21, minute=0, tzinfo=ZoneInfo("America/New_York")))
 async def weekly_recap():
     if not ROAST_CHANNEL_ID:
@@ -233,6 +288,7 @@ async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
     scheduled_roast.start()
     weekly_recap.start()
+    asyncio.ensure_future(tts_worker())
 
 
 @bot.event
@@ -283,6 +339,7 @@ async def on_message(message):
             print(f"[DEBUG] Sending reply: '{reply}'")
             await message.channel.send(reply)
             log_roast()
+            await tts_queue.put((message.guild.id, reply))
 
             count = load_count() + 1
             save_count(count)
