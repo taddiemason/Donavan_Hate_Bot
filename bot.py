@@ -35,16 +35,6 @@ INSURANCE_COST_PER_MINUTE = 10
 MAX_INSURANCE_MINUTES = 30
 
 SHOP_ITEMS = {
-    "double_roast": {
-        "name": "Double Roast",
-        "cost": 100,
-        "description": "Your next @mention fires TWO roasts back to back",
-    },
-    "mega_roast": {
-        "name": "Mega Roast",
-        "cost": 200,
-        "description": "Your next @mention also triggers an AI-generated extra savage bonus roast",
-    },
     "shame_bell": {
         "name": "Shame Bell",
         "cost": 50,
@@ -54,6 +44,26 @@ SHOP_ITEMS = {
         "name": "Snitch",
         "cost": 75,
         "description": "Next roast also gets DMed directly to Donovan",
+    },
+    "slow_clap": {
+        "name": "Slow Clap",
+        "cost": 75,
+        "description": "HateBot reacts to Donovan's next message with a series of 👏 emojis",
+    },
+    "receipt": {
+        "name": "Receipt",
+        "cost": 80,
+        "description": "HateBot digs up and quotes one of his old messages alongside the roast",
+    },
+    "laugh_track": {
+        "name": "Laugh Track",
+        "cost": 90,
+        "description": "Next roast is followed by 😂 spam from the bot",
+    },
+    "double_roast": {
+        "name": "Double Roast",
+        "cost": 100,
+        "description": "Your next @mention fires TWO roasts back to back",
     },
     "triple_roast": {
         "name": "Triple Roast",
@@ -70,10 +80,30 @@ SHOP_ITEMS = {
         "cost": 175,
         "description": "Next roast pings @here so nobody misses it",
     },
+    "mega_roast": {
+        "name": "Mega Roast",
+        "cost": 200,
+        "description": "Your next @mention also triggers an AI-generated extra savage bonus roast",
+    },
+    "press_release": {
+        "name": "Press Release",
+        "cost": 225,
+        "description": "AI generates a fake formal press release announcing his latest L",
+    },
     "hall_of_shame": {
         "name": "Hall of Shame",
         "cost": 250,
         "description": "Next roast gets pinned in the channel permanently",
+    },
+    "breaking_news": {
+        "name": "Breaking News",
+        "cost": 250,
+        "description": "Bot posts a fake breaking news alert about him",
+    },
+    "intervention": {
+        "name": "Intervention",
+        "cost": 275,
+        "description": "Bot @everyone and announces a formal server intervention for his behavior",
     },
     "scorched_earth": {
         "name": "Scorched Earth",
@@ -89,6 +119,11 @@ SHOP_ITEMS = {
         "name": "Exile",
         "cost": 400,
         "description": "Timeouts Donovan in the server for 60 seconds",
+    },
+    "lore_drop": {
+        "name": "Lore Drop",
+        "cost": 400,
+        "description": "AI generates a full absurd origin story for why Donovan is the way he is",
     },
     "nuclear": {
         "name": "Nuclear",
@@ -281,6 +316,7 @@ def load_economy():
             return json.load(f)
     return {"balances": {}, "bounties": [], "insurance_expires": None,
             "pending_upgrades": {}, "inventory": {}, "market_listings": [],
+            "slow_clap_pending": 0,
             "next_bounty_id": 1, "next_listing_id": 1}
 
 
@@ -535,6 +571,12 @@ async def on_message(message):
 
     if message.author.name.lower() == DONOVAN_USERNAME.lower():
         add_coins(message.author.id, 1)
+        eco = load_economy()
+        if eco.get("slow_clap_pending", 0) > 0:
+            eco["slow_clap_pending"] -= 1
+            save_economy(eco)
+            for _ in range(5):
+                await message.add_reaction("👏")
 
     if message.author.name.lower() == DONOVAN_USERNAME.lower() and len(message.content) > 10:
         if await is_hot_take(message.content):
@@ -614,6 +656,33 @@ async def on_message(message):
             if consume_upgrade(message.author.id, "triple_roast"):
                 await message.channel.send(reply)
                 await message.channel.send(f"⚡ **TRIPLE ROAST:** {reply}")
+
+            if consume_upgrade(message.author.id, "laugh_track"):
+                await message.channel.send("😂😂😂😂😂😂😂😂😂😂")
+
+            if consume_upgrade(message.author.id, "receipt"):
+                try:
+                    async for old_msg in message.channel.history(limit=200):
+                        if old_msg.author.name.lower() == DONOVAN_USERNAME.lower() and len(old_msg.content) > 15 and old_msg.id != message.id:
+                            await message.channel.send(f"🧾 **RECEIPT:** _{old_msg.author.display_name} once said:_ \"{old_msg.content}\"")
+                            break
+                except Exception:
+                    pass
+
+            if consume_upgrade(message.author.id, "press_release"):
+                pr = await ask_openai(f"Write a short fake formal press release (3-4 sentences) from 'Donovan Industries' announcing his latest embarrassing L. Make it sound official but absurd.")
+                await message.channel.send(f"📰 **PRESS RELEASE:**\n{pr}")
+
+            if consume_upgrade(message.author.id, "breaking_news"):
+                news = await ask_openai("Write a fake breaking news alert (1-2 sentences, all caps headline) about Donovan doing something embarrassing or pathetic. Include a fake news network name.")
+                await message.channel.send(f"🚨 **BREAKING NEWS** 🚨\n{news}")
+
+            if consume_upgrade(message.author.id, "intervention"):
+                await message.channel.send(f"@everyone\n\n📢 **FORMAL SERVER INTERVENTION**\n\nThis server has come together to formally address Donovan's ongoing behaviour. We are concerned. We are united. And we are not impressed.\n\nPlease take this moment to reflect, Donovan.")
+
+            if consume_upgrade(message.author.id, "lore_drop"):
+                lore = await ask_openai("Write a short absurd fictional origin story (3-5 sentences) for why Donovan is the way he is. Make it ridiculous, creative, and savage.")
+                await message.channel.send(f"📖 **DONOVAN LORE DROP:**\n{lore}")
 
             if consume_upgrade(message.author.id, "mega_roast"):
                 mega = await ask_openai("Give the most savage, creative, brutal roast about Donovan you can. Go all out.")
@@ -795,6 +864,13 @@ async def use_item(ctx, item_name: str = None):
         return
     owned.remove(item_name)
     eco["inventory"][uid] = owned
+
+    if item_name == "slow_clap":
+        eco["slow_clap_pending"] = eco.get("slow_clap_pending", 0) + 1
+        save_economy(eco)
+        await ctx.send("👏 **Slow Clap** armed! It will fire on Donovan's next message.")
+        return
+
     eco.setdefault("pending_upgrades", {}).setdefault(uid, []).append(item_name)
     save_economy(eco)
     item = SHOP_ITEMS[item_name]
