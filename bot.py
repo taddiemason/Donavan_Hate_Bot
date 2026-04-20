@@ -26,10 +26,26 @@ groq_client = AsyncOpenAI(
 
 COUNTER_FILE = "roast_count.json"
 ROAST_LOG_FILE = "roast_log.json"
+ECONOMY_FILE = "economy.json"
 MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
 DONOVAN_USERNAME = "itsrebrand"
 ROAST_CHANNEL_ID = int(os.getenv("ROAST_CHANNEL_ID", 0))
 VOICE_CHANNEL_ID = int(os.getenv("VOICE_CHANNEL_ID", 0))
+INSURANCE_COST_PER_MINUTE = 10
+MAX_INSURANCE_MINUTES = 30
+
+SHOP_ITEMS = {
+    "double_roast": {
+        "name": "Double Roast",
+        "cost": 100,
+        "description": "Your next @mention fires TWO roasts back to back",
+    },
+    "mega_roast": {
+        "name": "Mega Roast",
+        "cost": 200,
+        "description": "Your next @mention also triggers an AI-generated extra savage bonus roast",
+    },
+}
 
 tts_enabled = True
 tts_queue = asyncio.Queue()
@@ -152,6 +168,72 @@ def load_count():
 def save_count(count):
     with open(COUNTER_FILE, "w") as f:
         json.dump({"count": count}, f)
+
+
+def load_economy():
+    if os.path.exists(ECONOMY_FILE):
+        with open(ECONOMY_FILE, "r") as f:
+            return json.load(f)
+    return {"balances": {}, "bounties": [], "insurance_expires": None,
+            "pending_upgrades": {}, "market_listings": [],
+            "next_bounty_id": 1, "next_listing_id": 1}
+
+
+def save_economy(data):
+    with open(ECONOMY_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def add_coins(user_id, amount):
+    eco = load_economy()
+    uid = str(user_id)
+    eco["balances"][uid] = eco["balances"].get(uid, 0) + amount
+    save_economy(eco)
+
+
+def spend_coins(user_id, amount):
+    eco = load_economy()
+    uid = str(user_id)
+    bal = eco["balances"].get(uid, 0)
+    if bal < amount:
+        return False
+    eco["balances"][uid] = bal - amount
+    save_economy(eco)
+    return True
+
+
+def is_insurance_active():
+    exp = load_economy().get("insurance_expires")
+    if not exp:
+        return False
+    return datetime.datetime.fromisoformat(exp) > datetime.datetime.now(datetime.timezone.utc)
+
+
+def consume_upgrade(user_id, upgrade):
+    eco = load_economy()
+    uid = str(user_id)
+    upgrades = eco.get("pending_upgrades", {}).get(uid, [])
+    if upgrade in upgrades:
+        upgrades.remove(upgrade)
+        eco["pending_upgrades"][uid] = upgrades
+        save_economy(eco)
+        return True
+    return False
+
+
+def has_upgrade(user_id, upgrade):
+    eco = load_economy()
+    return upgrade in eco.get("pending_upgrades", {}).get(str(user_id), [])
+
+
+def claim_bounties():
+    eco = load_economy()
+    active = [b for b in eco["bounties"] if b["active"]]
+    total = sum(b["amount"] for b in active)
+    for b in eco["bounties"]:
+        b["active"] = False
+    save_economy(eco)
+    return total
 
 
 def get_donovan_activity(guild):
@@ -339,6 +421,9 @@ async def on_message(message):
         bot_member and any(role in message.role_mentions for role in bot_member.roles)
     )
 
+    if message.author.name.lower() == DONOVAN_USERNAME.lower():
+        add_coins(message.author.id, 1)
+
     if message.author.name.lower() == DONOVAN_USERNAME.lower() and len(message.content) > 10:
         if await is_hot_take(message.content):
             flagged = await message.reply(
@@ -369,10 +454,27 @@ async def on_message(message):
                     reply = random.choice(GENERAL_ROASTS)
 
             print(f"[DEBUG] Sending reply: '{reply}'")
+
+            if is_insurance_active():
+                await message.channel.send("🛡️ Donovan's insurance is active... unfortunately it doesn't cover being a loser.")
+
             await message.channel.send(reply)
             log_roast()
             if tts_enabled:
                 await tts_queue.put((message.guild.id, reply))
+
+            if consume_upgrade(message.author.id, "double_roast"):
+                await message.channel.send(f"⚡ **DOUBLE ROAST:** {reply}")
+
+            if consume_upgrade(message.author.id, "mega_roast"):
+                mega = await ask_openai("Give the most savage, creative, brutal roast about Donovan you can. Go all out.")
+                await message.channel.send(f"💥 **MEGA ROAST:** {mega}")
+
+            add_coins(message.author.id, 10)
+            bounty_total = claim_bounties()
+            if bounty_total > 0:
+                add_coins(message.author.id, bounty_total)
+                await message.channel.send(f"💰 {message.author.mention} collected **{bounty_total} Roast Coins** in active bounties!")
 
             count = load_count() + 1
             save_count(count)
@@ -393,11 +495,198 @@ async def commands_list(ctx):
     await ctx.send(
         "**📋 Donovan Hate Bot — Commands**\n\n"
         "**`@Donovan Hate Bot`** — Roasts Donovan. Ask it a question for a smart response.\n"
-        "**`!Trial <reason>`** — Puts Donovan on trial. Server votes guilty/not guilty for 60 seconds, bot sentences him.\n"
-        "**`!Guesswhosaidit`** — 3 round game. Guess if the quote was Donovan or someone else. 30 seconds per round.\n"
-        "**`!TTS on/off`** — Toggles voice channel roasts on or off. (Donovan cannot use this.)\n"
+        "**`!Trial <reason>`** — Puts Donovan on trial. Server votes guilty/not guilty for 60 seconds.\n"
+        "**`!Guesswhosaidit`** — 3 round game. Guess if the quote was Donovan or someone else.\n"
+        "**`!TTS on/off`** — Toggles voice channel roasts. (Donovan cannot use this.)\n\n"
+        "**💰 Economy**\n"
+        "**`!balance`** — Check your Roast Coin balance.\n"
+        "**`!leaderboard`** — Top 5 coin holders.\n"
+        "**`!shop`** — View upgrades for sale.\n"
+        "**`!buy <item>`** — Purchase an upgrade.\n"
+        "**`!bounty <amount> <description>`** — Post a bounty paid to whoever triggers the next roast.\n"
+        "**`!bounties`** — View active bounties.\n"
+        "**`!insurance <minutes>`** — Donovan only: buy temporary (useless) protection.\n"
+        "**`!give @user <amount>`** — Transfer coins to another member.\n"
+        "**`!blackmarket`** — View peer-to-peer upgrade listings.\n"
+        "**`!listitem <item> <price>`** — List an owned upgrade for sale.\n"
+        "**`!buyitem <id>`** — Buy an upgrade from the black market.\n\n"
         "**`!Commands`** — Shows this list.\n"
     )
+
+
+@bot.command(name="balance")
+async def balance(ctx, member: discord.Member = None):
+    target = member or ctx.author
+    bal = load_economy()["balances"].get(str(target.id), 0)
+    await ctx.send(f"💰 **{target.display_name}** has **{bal} Roast Coins**.")
+
+
+@bot.command(name="leaderboard")
+async def leaderboard(ctx):
+    eco = load_economy()
+    top = sorted(eco["balances"].items(), key=lambda x: x[1], reverse=True)[:5]
+    if not top:
+        await ctx.send("Nobody has earned any Roast Coins yet.")
+        return
+    lines = []
+    for i, (uid, coins) in enumerate(top, 1):
+        member = ctx.guild.get_member(int(uid))
+        name = member.display_name if member else "Unknown"
+        lines.append(f"{i}. **{name}** — {coins} coins")
+    await ctx.send("💰 **Roast Coin Leaderboard**\n" + "\n".join(lines))
+
+
+@bot.command(name="shop")
+async def shop(ctx):
+    lines = [f"**{v['name']}** (`{k}`) — {v['cost']} coins\n_{v['description']}_"
+             for k, v in SHOP_ITEMS.items()]
+    await ctx.send("🛒 **Roast Shop**\n\n" + "\n\n".join(lines) + "\n\nUse `!buy <item>` to purchase.")
+
+
+@bot.command(name="buy")
+async def buy_item(ctx, item_name: str = None):
+    if not item_name or item_name.lower() not in SHOP_ITEMS:
+        await ctx.send(f"Unknown item. Use `!shop` to see available items.")
+        return
+    item = SHOP_ITEMS[item_name.lower()]
+    if not spend_coins(ctx.author.id, item["cost"]):
+        bal = load_economy()["balances"].get(str(ctx.author.id), 0)
+        await ctx.send(f"Not enough coins. You have **{bal}**, this costs **{item['cost']}**.")
+        return
+    eco = load_economy()
+    eco.setdefault("pending_upgrades", {}).setdefault(str(ctx.author.id), []).append(item_name.lower())
+    save_economy(eco)
+    await ctx.send(f"✅ Purchased **{item['name']}**! It activates on your next @mention of the bot.")
+
+
+@bot.command(name="bounty")
+async def post_bounty(ctx, amount: int = None, *, description: str = None):
+    if ctx.author.name.lower() == DONOVAN_USERNAME.lower():
+        await ctx.send("Donovan cannot post bounties. He IS the bounty.")
+        return
+    if not amount or not description or amount <= 0:
+        await ctx.send("Usage: `!bounty <amount> <description>`")
+        return
+    if not spend_coins(ctx.author.id, amount):
+        bal = load_economy()["balances"].get(str(ctx.author.id), 0)
+        await ctx.send(f"Not enough coins. You have **{bal}**.")
+        return
+    eco = load_economy()
+    bid = eco.get("next_bounty_id", 1)
+    eco["bounties"].append({"id": bid, "poster_id": str(ctx.author.id),
+                            "amount": amount, "description": description, "active": True})
+    eco["next_bounty_id"] = bid + 1
+    save_economy(eco)
+    await ctx.send(f"🎯 **Bounty #{bid} posted!**\n_{description}_\n💰 Reward: **{amount} coins** to whoever triggers the next roast!")
+
+
+@bot.command(name="bounties")
+async def view_bounties(ctx):
+    active = [b for b in load_economy()["bounties"] if b["active"]]
+    if not active:
+        await ctx.send("🎯 No active bounties. Post one with `!bounty <amount> <description>`.")
+        return
+    lines = [f"**#{b['id']}** — {b['amount']} coins\n_{b['description']}_" for b in active]
+    await ctx.send("🎯 **Active Bounties**\n\n" + "\n\n".join(lines))
+
+
+@bot.command(name="insurance")
+async def insurance(ctx, minutes: int = None):
+    if ctx.author.name.lower() != DONOVAN_USERNAME.lower():
+        await ctx.send("Only Donovan needs insurance. Everyone else is fine.")
+        return
+    if not minutes or minutes <= 0:
+        await ctx.send(f"Usage: `!insurance <minutes>` — costs {INSURANCE_COST_PER_MINUTE} coins/min (max {MAX_INSURANCE_MINUTES} min).")
+        return
+    minutes = min(minutes, MAX_INSURANCE_MINUTES)
+    cost = minutes * INSURANCE_COST_PER_MINUTE
+    if not spend_coins(ctx.author.id, cost):
+        bal = load_economy()["balances"].get(str(ctx.author.id), 0)
+        await ctx.send(f"Not enough coins Donovan. You have **{bal}**, you need **{cost}**. Keep chatting to earn more.")
+        return
+    expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=minutes)
+    eco = load_economy()
+    eco["insurance_expires"] = expires.isoformat()
+    save_economy(eco)
+    await ctx.send(f"🛡️ Donovan bought **{minutes} minutes** of insurance for **{cost} coins**. Cute. Won't save him though.")
+
+
+@bot.command(name="give")
+async def give_coins(ctx, member: discord.Member = None, amount: int = None):
+    if not member or not amount or amount <= 0:
+        await ctx.send("Usage: `!give @user <amount>`")
+        return
+    if member.id == ctx.author.id:
+        await ctx.send("You can't give coins to yourself.")
+        return
+    if not spend_coins(ctx.author.id, amount):
+        await ctx.send("Not enough coins.")
+        return
+    add_coins(member.id, amount)
+    await ctx.send(f"💸 **{ctx.author.display_name}** sent **{amount} Roast Coins** to **{member.display_name}**.")
+
+
+@bot.command(name="blackmarket")
+async def black_market(ctx):
+    listings = [l for l in load_economy().get("market_listings", []) if l["active"]]
+    if not listings:
+        await ctx.send("🕶️ **Black Market**\nNo listings right now. Use `!listitem <item> <price>` to sell an upgrade.")
+        return
+    lines = []
+    for l in listings:
+        seller = ctx.guild.get_member(int(l["seller_id"]))
+        name = seller.display_name if seller else "Unknown"
+        item = SHOP_ITEMS.get(l["item"], {}).get("name", l["item"])
+        lines.append(f"**#{l['id']}** — {item} by {name} — {l['price']} coins  →  `!buyitem {l['id']}`")
+    await ctx.send("🕶️ **Black Market**\n\n" + "\n".join(lines))
+
+
+@bot.command(name="listitem")
+async def list_item(ctx, item_name: str = None, price: int = None):
+    if not item_name or not price or price <= 0:
+        await ctx.send("Usage: `!listitem <item_name> <price>`")
+        return
+    item_name = item_name.lower()
+    if item_name not in SHOP_ITEMS:
+        await ctx.send(f"Unknown item. Valid items: {', '.join(SHOP_ITEMS.keys())}")
+        return
+    if not consume_upgrade(ctx.author.id, item_name):
+        await ctx.send(f"You don't own a **{SHOP_ITEMS[item_name]['name']}** to sell.")
+        return
+    eco = load_economy()
+    lid = eco.get("next_listing_id", 1)
+    eco.setdefault("market_listings", []).append(
+        {"id": lid, "seller_id": str(ctx.author.id), "item": item_name, "price": price, "active": True}
+    )
+    eco["next_listing_id"] = lid + 1
+    save_economy(eco)
+    await ctx.send(f"🕶️ Listed **{SHOP_ITEMS[item_name]['name']}** for **{price} coins** on the black market (ID #{lid}).")
+
+
+@bot.command(name="buyitem")
+async def buy_market_item(ctx, listing_id: int = None):
+    if not listing_id:
+        await ctx.send("Usage: `!buyitem <listing_id>`")
+        return
+    eco = load_economy()
+    listing = next((l for l in eco.get("market_listings", []) if l["id"] == listing_id and l["active"]), None)
+    if not listing:
+        await ctx.send("Listing not found or already sold.")
+        return
+    if listing["seller_id"] == str(ctx.author.id):
+        await ctx.send("You can't buy your own listing.")
+        return
+    if not spend_coins(ctx.author.id, listing["price"]):
+        await ctx.send("Not enough coins.")
+        return
+    add_coins(int(listing["seller_id"]), listing["price"])
+    listing["active"] = False
+    eco.setdefault("pending_upgrades", {}).setdefault(str(ctx.author.id), []).append(listing["item"])
+    save_economy(eco)
+    seller = ctx.guild.get_member(int(listing["seller_id"]))
+    seller_name = seller.display_name if seller else "Unknown"
+    item_name = SHOP_ITEMS.get(listing["item"], {}).get("name", listing["item"])
+    await ctx.send(f"🕶️ **{ctx.author.display_name}** bought **{item_name}** from **{seller_name}** for **{listing['price']} coins**.")
 
 
 @bot.command(name="Guesswhosaidit")
