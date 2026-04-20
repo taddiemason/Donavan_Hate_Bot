@@ -225,7 +225,7 @@ def load_economy():
         with open(ECONOMY_FILE, "r") as f:
             return json.load(f)
     return {"balances": {}, "bounties": [], "insurance_expires": None,
-            "pending_upgrades": {}, "market_listings": [],
+            "pending_upgrades": {}, "inventory": {}, "market_listings": [],
             "next_bounty_id": 1, "next_listing_id": 1}
 
 
@@ -611,7 +611,9 @@ async def commands_list(ctx):
         "**`!balance`** — Check your Roast Coin balance.\n"
         "**`!leaderboard`** — Top 5 coin holders.\n"
         "**`!shop`** — View upgrades for sale.\n"
-        "**`!buy <item>`** — Purchase an upgrade.\n"
+        "**`!buy <item>`** — Purchase an upgrade (goes to inventory).\n"
+        "**`!inventory`** — View your owned and armed items.\n"
+        "**`!use <item>`** — Arm an item from your inventory (fires on next @mention).\n"
         "**`!bounty <amount> <description>`** — Post a bounty paid to whoever triggers the next roast.\n"
         "**`!bounties`** — View active bounties.\n"
         "**`!insurance <minutes>`** — Donovan only: buy temporary (useless) protection.\n"
@@ -663,9 +665,50 @@ async def buy_item(ctx, item_name: str = None):
         await ctx.send(f"Not enough coins. You have **{bal}**, this costs **{item['cost']}**.")
         return
     eco = load_economy()
-    eco.setdefault("pending_upgrades", {}).setdefault(str(ctx.author.id), []).append(item_name.lower())
+    eco.setdefault("inventory", {}).setdefault(str(ctx.author.id), []).append(item_name.lower())
     save_economy(eco)
-    await ctx.send(f"✅ Purchased **{item['name']}**! It activates on your next @mention of the bot.")
+    await ctx.send(f"✅ Purchased **{item['name']}**! It's in your inventory. Use `!use {item_name.lower()}` when you're ready to arm it.")
+
+
+@bot.command(name="inventory")
+async def inventory(ctx, member: discord.Member = None):
+    target = member or ctx.author
+    eco = load_economy()
+    owned = eco.get("inventory", {}).get(str(target.id), [])
+    armed = eco.get("pending_upgrades", {}).get(str(target.id), [])
+    if not owned and not armed:
+        await ctx.send(f"**{target.display_name}** has no items. Buy some with `!shop`.")
+        return
+    lines = []
+    if owned:
+        lines.append("**Inventory (unequipped):**")
+        for item in owned:
+            lines.append(f"  • {SHOP_ITEMS[item]['name']} (`{item}`)")
+    if armed:
+        lines.append("**Armed (fires on next @mention):**")
+        for item in armed:
+            lines.append(f"  ⚡ {SHOP_ITEMS.get(item, {}).get('name', item)}")
+    await ctx.send(f"🎒 **{target.display_name}'s Items**\n" + "\n".join(lines))
+
+
+@bot.command(name="use")
+async def use_item(ctx, item_name: str = None):
+    if not item_name:
+        await ctx.send("Usage: `!use <item_name>`")
+        return
+    item_name = item_name.lower()
+    eco = load_economy()
+    uid = str(ctx.author.id)
+    owned = eco.get("inventory", {}).get(uid, [])
+    if item_name not in owned:
+        await ctx.send(f"You don't have a **{SHOP_ITEMS.get(item_name, {}).get('name', item_name)}** in your inventory.")
+        return
+    owned.remove(item_name)
+    eco["inventory"][uid] = owned
+    eco.setdefault("pending_upgrades", {}).setdefault(uid, []).append(item_name)
+    save_economy(eco)
+    item = SHOP_ITEMS[item_name]
+    await ctx.send(f"⚡ **{item['name']}** armed! It will fire on your next @mention of the bot.")
 
 
 @bot.command(name="bounty")
@@ -759,10 +802,14 @@ async def list_item(ctx, item_name: str = None, price: int = None):
     if item_name not in SHOP_ITEMS:
         await ctx.send(f"Unknown item. Valid items: {', '.join(SHOP_ITEMS.keys())}")
         return
-    if not consume_upgrade(ctx.author.id, item_name):
-        await ctx.send(f"You don't own a **{SHOP_ITEMS[item_name]['name']}** to sell.")
-        return
     eco = load_economy()
+    uid = str(ctx.author.id)
+    owned = eco.get("inventory", {}).get(uid, [])
+    if item_name not in owned:
+        await ctx.send(f"You don't have a **{SHOP_ITEMS[item_name]['name']}** in your inventory to sell.")
+        return
+    owned.remove(item_name)
+    eco["inventory"][uid] = owned
     lid = eco.get("next_listing_id", 1)
     eco.setdefault("market_listings", []).append(
         {"id": lid, "seller_id": str(ctx.author.id), "item": item_name, "price": price, "active": True}
@@ -790,7 +837,7 @@ async def buy_market_item(ctx, listing_id: int = None):
         return
     add_coins(int(listing["seller_id"]), listing["price"])
     listing["active"] = False
-    eco.setdefault("pending_upgrades", {}).setdefault(str(ctx.author.id), []).append(listing["item"])
+    eco.setdefault("inventory", {}).setdefault(str(ctx.author.id), []).append(listing["item"])
     save_economy(eco)
     seller = ctx.guild.get_member(int(listing["seller_id"]))
     seller_name = seller.display_name if seller else "Unknown"
