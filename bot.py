@@ -88,7 +88,7 @@ SHOP_ITEMS = {
     "exile": {
         "name": "Exile",
         "cost": 400,
-        "description": "Timeouts Donovan in the server for 60 seconds (requires bot Moderate Members permission)",
+        "description": "Timeouts Donovan in the server for 60 seconds",
     },
     "nuclear": {
         "name": "Nuclear",
