@@ -141,6 +141,7 @@ trivia_answer = None
 guessroast_active = False
 highlow_games = {}
 blackjack_games = {}
+sports_trivia_active = {}
 
 SLOT_SYMBOLS = ["🍋", "🍒", "🍇", "💎", "🎰", "7️⃣"]
 SLOT_PAYOUTS = {("7️⃣", "7️⃣", "7️⃣"): 50, ("💎", "💎", "💎"): 25, ("🎰", "🎰", "🎰"): 15}
@@ -519,6 +520,53 @@ async def argue_with_donovan(message_content):
     except Exception as e:
         print(f"[ERROR] Donovan argue failed: {e}")
         return random.choice(DONOVAN_ROASTS_DIRECT)
+
+
+SPORTS_TRIVIA_FALLBACKS = [
+    ("What trophy is awarded to the NHL champion?", "Stanley Cup"),
+    ("How many periods are in a regulation NHL game?", "3"),
+    ("How many players does each NFL team have on the field at once?", "11"),
+    ("How many points is a touchdown worth in the NFL?", "6"),
+    ("How many players are on the court per NBA team at once?", "5"),
+    ("How many points is an NBA three-pointer worth?", "3"),
+    ("What NBA team has won the most championships?", "Celtics"),
+    ("How many minutes are in an NBA quarter?", "12"),
+    ("What is the name of the NFL championship game?", "Super Bowl"),
+    ("How many rings did Michael Jordan win with the Bulls?", "6"),
+]
+
+
+async def generate_sports_question():
+    try:
+        response = await groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a sports trivia question generator. Generate one trivia question about "
+                        "NHL hockey, NFL football, or NBA basketball. Make it challenging but fair. "
+                        "Respond in EXACTLY this format with nothing else:\n"
+                        "QUESTION: <the question>\n"
+                        "ANSWER: <short answer, 1-5 words>"
+                    ),
+                },
+                {"role": "user", "content": "Generate a sports trivia question."},
+            ],
+            max_tokens=80,
+        )
+        text = response.choices[0].message.content.strip()
+        question, answer = "", ""
+        for line in text.split("\n"):
+            if line.startswith("QUESTION:"):
+                question = line.replace("QUESTION:", "").strip()
+            elif line.startswith("ANSWER:"):
+                answer = line.replace("ANSWER:", "").strip()
+        if question and answer:
+            return question, answer
+    except Exception as e:
+        print(f"[ERROR] Sports trivia generation failed: {e}")
+    return random.choice(SPORTS_TRIVIA_FALLBACKS)
 
 
 async def is_hot_take(text):
@@ -1258,6 +1306,74 @@ async def dice_duel(ctx, opponent: discord.Member = None, amount: int = None):
             await ctx.send("🤝 **TIE — rolling again!**")
 
 
+@bot.command(name="sportstriva")
+async def sports_trivia(ctx):
+    import re
+    channel_id = ctx.channel.id
+    if sports_trivia_active.get(channel_id):
+        await ctx.send("A sports trivia game is already running in this channel!")
+        return
+
+    sports_trivia_active[channel_id] = True
+    scores = {}
+
+    try:
+        await ctx.send("🏈🏒🏀 **SPORTS TRIVIA** — 5 rounds, **10 coins** per correct answer! First to answer wins each round!")
+        await asyncio.sleep(2)
+
+        for round_num in range(1, 6):
+            question, answer = await generate_sports_question()
+            answer_lower = answer.lower()
+
+            await ctx.send(f"**Round {round_num}/5**\n\n_{question}_\n\n⏱️ 30 seconds!")
+
+            def check(m):
+                return m.channel.id == channel_id and not m.author.bot
+
+            winner = None
+            deadline = asyncio.get_event_loop().time() + 30
+
+            while True:
+                remaining = deadline - asyncio.get_event_loop().time()
+                if remaining <= 0:
+                    break
+                try:
+                    msg = await bot.wait_for("message", check=check, timeout=remaining)
+                    if re.search(r'\b' + re.escape(answer_lower) + r'\b', msg.content.lower()):
+                        winner = msg.author
+                        break
+                except asyncio.TimeoutError:
+                    break
+
+            if winner:
+                add_coins(winner.id, 10)
+                scores[winner.id] = scores.get(winner.id, 0) + 10
+                await ctx.send(f"✅ **{winner.display_name}** got it! The answer was **{answer}** — **+10 coins!**")
+            else:
+                await ctx.send(f"⏱️ Time's up! The answer was **{answer}**.")
+
+            if round_num < 5:
+                await asyncio.sleep(3)
+
+        if scores:
+            top = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+            board = "\n".join(
+                f"{ctx.guild.get_member(uid).display_name if ctx.guild.get_member(uid) else 'Unknown'}: {c} coins"
+                for uid, c in top
+            )
+            mvp = ctx.guild.get_member(top[0][0])
+            mvp_name = mvp.display_name if mvp else "Unknown"
+            await ctx.send(f"🏆 **SPORTS TRIVIA OVER!**\n\n{board}\n\nMVP: **{mvp_name}** with **{top[0][1]} coins** earned!")
+        else:
+            await ctx.send("🏆 **SPORTS TRIVIA OVER!** Nobody scored a single point. Embarrassing.")
+
+    except Exception as e:
+        print(f"[ERROR] Sports trivia crashed: {e}")
+        await ctx.send("Sports trivia crashed. Blame Donovan.")
+    finally:
+        sports_trivia_active[channel_id] = False
+
+
 @bot.command(name="lottery")
 async def lottery(ctx, amount: int = None):
     if not amount or amount < 10:
@@ -1343,6 +1459,7 @@ async def commands_list(ctx):
         "**`!flip <amount> heads/tails`** — Coinflip gamble.\n"
         "**`!slots <amount>`** — Slot machine. Match symbols for big payouts.\n"
         "**`!trivia`** — First to answer wins 50 coins.\n"
+        "**`!sportstriva`** — 5 rounds of AI-generated NHL/NFL/NBA trivia. 10 coins per correct answer.\n"
         "**`!guessroast`** — Roast posted with name blanked, guess who it's about.\n"
         "**`!dice @user <amount>`** — Challenge someone to a dice duel. Roll 1-100, highest wins the pot. Ties re-roll.\n"
         "**`!highlow <amount>`** — Guess higher or lower, chain correct answers for a multiplier.\n"
