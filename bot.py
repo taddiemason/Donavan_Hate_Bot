@@ -140,9 +140,13 @@ trivia_active = False
 trivia_answer = None
 guessroast_active = False
 highlow_games = {}
+blackjack_games = {}
 
 SLOT_SYMBOLS = ["🍋", "🍒", "🍇", "💎", "🎰", "7️⃣"]
 SLOT_PAYOUTS = {("7️⃣", "7️⃣", "7️⃣"): 50, ("💎", "💎", "💎"): 25, ("🎰", "🎰", "🎰"): 15}
+
+CARD_SUITS = ["♠", "♥", "♦", "♣"]
+CARD_RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
 
 SERVER_ROAST_MILESTONES = {100: 50, 250: 75, 500: 100, 1000: 200, 2500: 300, 5000: 500}
 
@@ -249,6 +253,43 @@ GENERAL_ROASTS = [
     "Donovan is a pussy",
     "Donovan has burger wrappers stuck to his ass",
 ]
+
+
+def new_deck():
+    deck = [(r, s) for s in CARD_SUITS for r in CARD_RANKS]
+    random.shuffle(deck)
+    return deck
+
+
+def card_str(card):
+    return f"{card[0]}{card[1]}"
+
+
+def hand_str(hand, hide_second=False):
+    if hide_second:
+        return f"{card_str(hand[0])} 🂠"
+    return " ".join(card_str(c) for c in hand)
+
+
+def hand_value(hand):
+    value = 0
+    aces = 0
+    for rank, _ in hand:
+        if rank in ("J", "Q", "K"):
+            value += 10
+        elif rank == "A":
+            aces += 1
+            value += 11
+        else:
+            value += int(rank)
+    while value > 21 and aces:
+        value -= 10
+        aces -= 1
+    return value
+
+
+def is_blackjack(hand):
+    return len(hand) == 2 and hand_value(hand) == 21
 
 
 def log_roast():
@@ -1000,6 +1041,153 @@ async def highlow(ctx, amount: int = None):
     await ctx.send(f"🎯 The number is **{number}**.\nWill the next be `higher` or `lower`? Type your answer!\nType `cashout` to take your winnings at any time.")
 
 
+@bot.command(name="blackjack")
+async def blackjack(ctx, amount: int = None):
+    if not amount or amount <= 0:
+        await ctx.send("Usage: `!blackjack <bet>`")
+        return
+
+    channel_id = ctx.channel.id
+
+    # Join an existing waiting game
+    if channel_id in blackjack_games and blackjack_games[channel_id]["state"] == "waiting":
+        game = blackjack_games[channel_id]
+        if any(p["user_id"] == ctx.author.id for p in game["players"]):
+            await ctx.send("You're already at this table.")
+            return
+        if not spend_coins(ctx.author.id, amount):
+            bal = load_economy()["balances"].get(str(ctx.author.id), 0)
+            await ctx.send(f"Not enough coins. You have **{bal}**.")
+            return
+        game["players"].append({
+            "user_id": ctx.author.id, "name": ctx.author.display_name,
+            "bet": amount, "hand": [], "stood": False, "busted": False,
+        })
+        await ctx.send(f"✅ **{ctx.author.display_name}** joined for **{amount} coins**!")
+        return
+
+    # Block if a round is mid-game
+    if channel_id in blackjack_games:
+        await ctx.send("A blackjack game is already running. Wait for the next round.")
+        return
+
+    if not spend_coins(ctx.author.id, amount):
+        bal = load_economy()["balances"].get(str(ctx.author.id), 0)
+        await ctx.send(f"Not enough coins. You have **{bal}**.")
+        return
+
+    blackjack_games[channel_id] = {
+        "state": "waiting",
+        "players": [{"user_id": ctx.author.id, "name": ctx.author.display_name,
+                     "bet": amount, "hand": [], "stood": False, "busted": False}],
+        "dealer_hand": [],
+        "deck": [],
+    }
+
+    await ctx.send(
+        f"🃏 **BLACKJACK** — **{ctx.author.display_name}** opened a table for **{amount} coins**!\n"
+        f"Others: `!blackjack <bet>` to join. Starting in **20 seconds**..."
+    )
+    await asyncio.sleep(20)
+
+    if channel_id not in blackjack_games:
+        return
+
+    game = blackjack_games[channel_id]
+    game["state"] = "playing"
+
+    deck = new_deck()
+    game["deck"] = deck
+    for p in game["players"]:
+        p["hand"] = [deck.pop(), deck.pop()]
+    game["dealer_hand"] = [deck.pop(), deck.pop()]
+
+    # Show initial state
+    lines = ["🃏 **BLACKJACK — CARDS DEALT**\n",
+             f"**Dealer:** {hand_str(game['dealer_hand'], hide_second=True)}\n"]
+    for p in game["players"]:
+        val = hand_value(p["hand"])
+        bj = " — 🃏 **BLACKJACK!**" if is_blackjack(p["hand"]) else f" ({val})"
+        lines.append(f"**{p['name']}:** {hand_str(p['hand'])}{bj}")
+    await ctx.send("\n".join(lines))
+
+    # Player turns
+    for player in game["players"]:
+        if is_blackjack(player["hand"]):
+            player["stood"] = True
+            await ctx.send(f"🃏 **{player['name']}** has Blackjack — auto-stand!")
+            continue
+
+        await ctx.send(f"➡️ **{player['name']}'s turn** — `hit` or `stand` (30s)")
+
+        def check(m, pid=player["user_id"]):
+            return m.author.id == pid and m.channel.id == channel_id and m.content.lower() in ("hit", "stand")
+
+        while not player["stood"] and not player["busted"]:
+            try:
+                msg = await bot.wait_for("message", check=check, timeout=30)
+                if msg.content.lower() == "stand":
+                    player["stood"] = True
+                    await ctx.send(f"✋ **{player['name']}** stands at **{hand_value(player['hand'])}**.")
+                else:
+                    card = game["deck"].pop()
+                    player["hand"].append(card)
+                    val = hand_value(player["hand"])
+                    if val > 21:
+                        player["busted"] = True
+                        await ctx.send(f"💥 **{player['name']}** hits {card_str(card)} → **{val} — BUST!**")
+                    elif val == 21:
+                        player["stood"] = True
+                        await ctx.send(f"🎯 **{player['name']}** hits {card_str(card)} → **21!** Auto-stand.")
+                    else:
+                        await ctx.send(f"🃏 **{player['name']}** hits {card_str(card)} → **{val}**. Hit or stand?")
+            except asyncio.TimeoutError:
+                player["stood"] = True
+                await ctx.send(f"⏱️ **{player['name']}** timed out — auto-stand at **{hand_value(player['hand'])}**.")
+
+    # Dealer plays (only if someone didn't bust)
+    dealer_val = hand_value(game["dealer_hand"])
+    await ctx.send(f"🤖 **Dealer reveals:** {hand_str(game['dealer_hand'])} ({dealer_val})")
+
+    active = [p for p in game["players"] if not p["busted"]]
+    if active:
+        while dealer_val < 17:
+            card = game["deck"].pop()
+            game["dealer_hand"].append(card)
+            dealer_val = hand_value(game["dealer_hand"])
+            await asyncio.sleep(1)
+            await ctx.send(f"🤖 Dealer hits {card_str(card)} → **{dealer_val}**")
+
+    dealer_bust = dealer_val > 21
+    if dealer_bust:
+        await ctx.send(f"💥 **Dealer busts at {dealer_val}!**")
+
+    # Results
+    result_lines = ["🃏 **BLACKJACK — RESULTS**\n"]
+    for p in game["players"]:
+        pval = hand_value(p["hand"])
+        if p["busted"]:
+            result_lines.append(f"❌ **{p['name']}** — Bust — lost **{p['bet']} coins**")
+        elif is_blackjack(p["hand"]) and not is_blackjack(game["dealer_hand"]):
+            payout = int(p["bet"] * 2.5)
+            add_coins(p["user_id"], payout)
+            result_lines.append(f"🃏 **{p['name']}** — Blackjack! — won **{payout - p['bet']} coins**")
+        elif is_blackjack(p["hand"]) and is_blackjack(game["dealer_hand"]):
+            add_coins(p["user_id"], p["bet"])
+            result_lines.append(f"🤝 **{p['name']}** — Blackjack push — bet returned")
+        elif dealer_bust or pval > dealer_val:
+            add_coins(p["user_id"], p["bet"] * 2)
+            result_lines.append(f"✅ **{p['name']}** — {pval} vs {dealer_val} — won **{p['bet']} coins**")
+        elif pval == dealer_val:
+            add_coins(p["user_id"], p["bet"])
+            result_lines.append(f"🤝 **{p['name']}** — {pval} push — bet returned")
+        else:
+            result_lines.append(f"❌ **{p['name']}** — {pval} vs {dealer_val} — lost **{p['bet']} coins**")
+
+    del blackjack_games[channel_id]
+    await ctx.send("\n".join(result_lines))
+
+
 @bot.command(name="lottery")
 async def lottery(ctx, amount: int = None):
     if not amount or amount < 10:
@@ -1087,6 +1275,7 @@ async def commands_list(ctx):
         "**`!trivia`** — First to answer wins 50 coins.\n"
         "**`!guessroast`** — Roast posted with name blanked, guess who it's about.\n"
         "**`!highlow <amount>`** — Guess higher or lower, chain correct answers for a multiplier.\n"
+        "**`!blackjack <bet>`** — Multiplayer blackjack vs the dealer. Others can join before the round starts.\n"
         "**`!lottery <amount>`** — Buy lottery tickets (10 coins each). Drawn every Sunday at 9 PM EST.\n"
         "**`!buyitem <id>`** — Buy an upgrade from the black market.\n\n"
         "**`!Commands`** — Shows this list."
