@@ -1042,10 +1042,9 @@ async def highlow(ctx, amount: int = None):
 
 
 @bot.command(name="blackjack")
-async def blackjack(ctx, amount: int = None):
-    if not amount or amount <= 0:
-        await ctx.send("Usage: `!blackjack <bet>`")
-        return
+async def blackjack(ctx, amount: int = 10):
+    if amount <= 0:
+        amount = 10
 
     channel_id = ctx.channel.id
 
@@ -1275,7 +1274,7 @@ async def commands_list(ctx):
         "**`!trivia`** — First to answer wins 50 coins.\n"
         "**`!guessroast`** — Roast posted with name blanked, guess who it's about.\n"
         "**`!highlow <amount>`** — Guess higher or lower, chain correct answers for a multiplier.\n"
-        "**`!blackjack <bet>`** — Multiplayer blackjack vs the dealer. Others can join before the round starts.\n"
+        "**`!blackjack [bet]`** — Multiplayer blackjack vs the dealer. Bet defaults to 10 coins. Others can join before the round starts.\n"
         "**`!lottery <amount>`** — Buy lottery tickets (10 coins each). Drawn every Sunday at 9 PM EST.\n"
         "**`!buyitem <id>`** — Buy an upgrade from the black market.\n\n"
         "**`!Commands`** — Shows this list."
