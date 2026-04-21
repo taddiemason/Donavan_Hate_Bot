@@ -710,7 +710,7 @@ async def on_message(message):
             for _ in range(5):
                 await message.add_reaction("👏")
 
-    if is_donovan(message.author) and len(message.content) > 10 and random.random() < 0.2:
+    if is_donovan(message.author) and len(message.content) > 10 and random.random() < 0.1:
         if await is_hot_take(message.content):
             flagged = await message.reply(
                 "🚨 **HOT TAKE ALERT** 🚨\nDonovan is at it again. React to cast your vote:"
