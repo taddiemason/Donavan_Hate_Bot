@@ -688,7 +688,7 @@ async def weekly_recap():
         winner_name = winner.display_name if winner else "Someone"
         add_coins(int(winner_id), pot)
         eco["lottery_tickets"] = {}
-        eco["lottery_pot"] = 0
+        eco["lottery_pot"] = 500
         save_economy(eco)
         await channel.send(
             f"🎟️ **WEEKLY LOTTERY DRAWING!**\n\n"
@@ -698,7 +698,7 @@ async def weekly_recap():
         )
     else:
         eco["lottery_tickets"] = {}
-        eco["lottery_pot"] = 0
+        eco["lottery_pot"] = 500
         save_economy(eco)
 
 
@@ -1378,7 +1378,7 @@ async def sports_trivia(ctx):
 async def lottery(ctx, amount: int = None):
     if not amount or amount < 10:
         eco = load_economy()
-        pot = eco.get("lottery_pot", 0)
+        pot = eco.get("lottery_pot", 500)
         tickets = eco.get("lottery_tickets", {}).get(str(ctx.author.id), 0)
         await ctx.send(f"🎟️ **Weekly Lottery** — 10 coins per ticket\nCurrent pot: **{pot} coins** | Your tickets: **{tickets}**\nUsage: `!lottery <amount>` (must be multiple of 10)")
         return
