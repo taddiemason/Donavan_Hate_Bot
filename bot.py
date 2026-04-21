@@ -1306,7 +1306,7 @@ async def dice_duel(ctx, opponent: discord.Member = None, amount: int = None):
             await ctx.send("🤝 **TIE — rolling again!**")
 
 
-@bot.command(name="sportstriva")
+@bot.command(name="sportstrivia")
 async def sports_trivia(ctx):
     import re
     channel_id = ctx.channel.id
@@ -1459,7 +1459,7 @@ async def commands_list(ctx):
         "**`!flip <amount> heads/tails`** — Coinflip gamble.\n"
         "**`!slots <amount>`** — Slot machine. Match symbols for big payouts.\n"
         "**`!trivia`** — First to answer wins 50 coins.\n"
-        "**`!sportstriva`** — 5 rounds of AI-generated NHL/NFL/NBA trivia. 10 coins per correct answer.\n"
+        "**`!sportstrivia`** — 5 rounds of AI-generated NHL/NFL/NBA trivia. 10 coins per correct answer.\n"
         "**`!guessroast`** — Roast posted with name blanked, guess who it's about.\n"
         "**`!dice @user <amount>`** — Challenge someone to a dice duel. Roll 1-100, highest wins the pot. Ties re-roll.\n"
         "**`!highlow <amount>`** — Guess higher or lower, chain correct answers for a multiplier.\n"
