@@ -545,10 +545,14 @@ async def generate_sports_question():
                     "role": "system",
                     "content": (
                         "You are a sports trivia question generator. Generate one trivia question about "
-                        "NHL hockey, NFL football, or NBA basketball. Make it challenging but fair. "
+                        "NHL hockey, NFL football, or NBA basketball. Make it challenging but fair.\n"
+                        "Rules for the ANSWER field:\n"
+                        "- Use the shortest recognizable form (last name only for players is fine)\n"
+                        "- No extra words, no punctuation, no explanations\n"
+                        "- Just the name, number, or team — nothing else\n"
                         "Respond in EXACTLY this format with nothing else:\n"
                         "QUESTION: <the question>\n"
-                        "ANSWER: <short answer, 1-5 words>"
+                        "ANSWER: <1-3 words max, no punctuation>"
                     ),
                 },
                 {"role": "user", "content": "Generate a sports trivia question."},
@@ -561,12 +565,38 @@ async def generate_sports_question():
             if line.startswith("QUESTION:"):
                 question = line.replace("QUESTION:", "").strip()
             elif line.startswith("ANSWER:"):
-                answer = line.replace("ANSWER:", "").strip()
+                answer = line.replace("ANSWER:", "").strip().rstrip(".")
         if question and answer:
             return question, answer
     except Exception as e:
         print(f"[ERROR] Sports trivia generation failed: {e}")
     return random.choice(SPORTS_TRIVIA_FALLBACKS)
+
+
+async def judge_sports_answer(question, expected, user_answer):
+    try:
+        response = await groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a sports trivia judge. Given a question, the correct answer, and a player's answer, "
+                        "decide if the player is correct. Accept last names only, common nicknames, reasonable alternate "
+                        "spellings, and minor typos. Reply with ONLY 'yes' or 'no'."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"Question: {question}\nCorrect answer: {expected}\nPlayer answered: {user_answer}\nIs the player correct?",
+                },
+            ],
+            max_tokens=5,
+        )
+        return response.choices[0].message.content.strip().lower().startswith("yes")
+    except Exception as e:
+        print(f"[ERROR] Answer judge failed: {e}")
+        return expected.lower() in user_answer.lower()
 
 
 async def is_hot_take(text):
@@ -1308,7 +1338,6 @@ async def dice_duel(ctx, opponent: discord.Member = None, amount: int = None):
 
 @bot.command(name="sportstrivia")
 async def sports_trivia(ctx):
-    import re
     channel_id = ctx.channel.id
     if sports_trivia_active.get(channel_id):
         await ctx.send("A sports trivia game is already running in this channel!")
@@ -1323,12 +1352,11 @@ async def sports_trivia(ctx):
 
         for round_num in range(1, 6):
             question, answer = await generate_sports_question()
-            answer_lower = answer.lower()
 
             await ctx.send(f"**Round {round_num}/5**\n\n_{question}_\n\n⏱️ 30 seconds!")
 
             def check(m):
-                return m.channel.id == channel_id and not m.author.bot
+                return m.channel.id == channel_id and not m.author.bot and not m.content.startswith("!") and len(m.content.strip()) > 1
 
             winner = None
             deadline = asyncio.get_event_loop().time() + 30
@@ -1339,7 +1367,8 @@ async def sports_trivia(ctx):
                     break
                 try:
                     msg = await bot.wait_for("message", check=check, timeout=remaining)
-                    if re.search(r'\b' + re.escape(answer_lower) + r'\b', msg.content.lower()):
+                    correct = await judge_sports_answer(question, answer, msg.content.strip())
+                    if correct:
                         winner = msg.author
                         break
                 except asyncio.TimeoutError:
