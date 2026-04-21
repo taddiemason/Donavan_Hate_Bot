@@ -536,7 +536,10 @@ SPORTS_TRIVIA_FALLBACKS = [
 ]
 
 
-async def generate_sports_question():
+async def generate_sports_question(sport, used_players=None):
+    import re
+    avoid = (f"\nDo NOT ask about any of these already-used players or topics this game: {', '.join(used_players)}."
+             if used_players else "")
     try:
         response = await groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -544,20 +547,20 @@ async def generate_sports_question():
                 {
                     "role": "system",
                     "content": (
-                        "You are a sports trivia question generator. Generate one trivia question about "
-                        "NHL hockey, NFL football, or NBA basketball from 1990 to present.\n"
+                        f"You are a sports trivia question generator. Generate one trivia question specifically about {sport} from 1990 to present.\n"
                         "STRICT RULES:\n"
                         "- Only generate questions about famous, well-known facts you are 100% certain are correct\n"
-                        "- Stick to Super Bowl MVPs, championship winners, famous records by household-name players\n"
+                        "- Stick to championship winners, MVP awards, and famous records by household-name players\n"
                         "- Do NOT generate questions about obscure statistics or records you are not sure about\n"
                         "- ANSWER must be a last name only (for players) or a team name — nothing else\n"
                         "- Never put numbers, stats, or extra words in the ANSWER field\n"
+                        f"{avoid}\n"
                         "Respond in EXACTLY this format:\n"
                         "QUESTION: <question>\n"
                         "ANSWER: <last name or team name only>"
                     ),
                 },
-                {"role": "user", "content": "Generate a sports trivia question."},
+                {"role": "user", "content": f"Generate a {sport} trivia question."},
             ],
             max_tokens=100,
         )
@@ -568,8 +571,6 @@ async def generate_sports_question():
                 question = line.replace("QUESTION:", "").strip()
             elif line.startswith("ANSWER:"):
                 raw = line.replace("ANSWER:", "").strip()
-                # Keep only the first 1-3 words, strip punctuation and trailing numbers
-                import re
                 raw = re.sub(r'[^\w\s]', '', raw).strip()
                 answer = " ".join(raw.split()[:3])
         if question and answer:
@@ -1359,8 +1360,11 @@ async def sports_trivia(ctx):
         await ctx.send("🏈🏒🏀 **SPORTS TRIVIA** — 5 rounds, **20 coins** per correct answer! First to answer wins each round!")
         await asyncio.sleep(2)
 
-        for round_num in range(1, 6):
-            question, answer = await generate_sports_question()
+        sport_rotation = ["NHL", "NFL", "NBA", "NHL", "NFL"]
+        used_players = []
+        for round_num, sport in enumerate(sport_rotation, 1):
+            question, answer = await generate_sports_question(sport, used_players)
+            used_players.append(answer)
 
             await ctx.send(f"**Round {round_num}/5**\n\n_{question}_\n\n⏱️ 30 seconds!")
 
