@@ -1348,7 +1348,7 @@ async def sports_trivia(ctx):
     scores = {}
 
     try:
-        await ctx.send("🏈🏒🏀 **SPORTS TRIVIA** — 5 rounds, **10 coins** per correct answer! First to answer wins each round!")
+        await ctx.send("🏈🏒🏀 **SPORTS TRIVIA** — 5 rounds, **20 coins** per correct answer! First to answer wins each round!")
         await asyncio.sleep(2)
 
         for round_num in range(1, 6):
@@ -1376,9 +1376,9 @@ async def sports_trivia(ctx):
                     break
 
             if winner:
-                add_coins(winner.id, 10)
-                scores[winner.id] = scores.get(winner.id, 0) + 10
-                await ctx.send(f"✅ **{winner.display_name}** got it! The answer was **{answer}** — **+10 coins!**")
+                add_coins(winner.id, 20)
+                scores[winner.id] = scores.get(winner.id, 0) + 20
+                await ctx.send(f"✅ **{winner.display_name}** got it! The answer was **{answer}** — **+20 coins!**")
             else:
                 await ctx.send(f"⏱️ Time's up! The answer was **{answer}**.")
 
@@ -1489,7 +1489,7 @@ async def commands_list(ctx):
         "**`!flip <amount> heads/tails`** — Coinflip gamble.\n"
         "**`!slots <amount>`** — Slot machine. Match symbols for big payouts.\n"
         "**`!trivia`** — First to answer wins 50 coins.\n"
-        "**`!sportstrivia`** — 5 rounds of AI-generated NHL/NFL/NBA trivia. 10 coins per correct answer.\n"
+        "**`!sportstrivia`** — 5 rounds of AI-generated NHL/NFL/NBA trivia. 20 coins per correct answer.\n"
         "**`!guessroast`** — Roast posted with name blanked, guess who it's about.\n"
         "**`!dice @user <amount>`** — Challenge someone to a dice duel. Roll 1-100, highest wins the pot. Ties re-roll.\n"
         "**`!highlow <amount>`** — Guess higher or lower, chain correct answers for a multiplier.\n"
