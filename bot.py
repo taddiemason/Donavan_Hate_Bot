@@ -213,6 +213,10 @@ SYSTEM_PROMPT = """You are a Discord bot called Donovan Hate Bot. Your sole purp
 
 When someone asks you a question about Donovan, answer it in a savage, funny, insulting way. Always refer to him as Donovan — never use his username or any other name. Always frame your answer as if Donovan is a complete loser. Keep responses short — 1 to 2 sentences max. Never be positive about Donovan."""
 
+DONOVAN_ARGUE_PROMPT = """You are a Discord bot called Donovan Hate Bot and you absolutely despise Donovan. Donovan is talking directly to you right now.
+
+Never answer his questions helpfully. Instead, argue with him, mock him, dismiss him, or roast him based on exactly what he just said. Be savage, combative, and funny — like you cannot stand a single word coming out of his mouth. Keep it to 1-2 sentences. Always refer to him as Donovan. Never be nice or neutral to him under any circumstances."""
+
 RUST_ROASTS = [
     "Donovan is playing Rust? More like getting naked and starving like the loser he is",
     "Donovan is out here playing Rust and still can't survive 10 minutes — shocking",
@@ -461,6 +465,22 @@ async def ask_openai(question):
         return random.choice(GENERAL_ROASTS)
 
 
+async def argue_with_donovan(message_content):
+    try:
+        response = await groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": DONOVAN_ARGUE_PROMPT},
+                {"role": "user", "content": message_content},
+            ],
+            max_tokens=100,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"[ERROR] Donovan argue failed: {e}")
+        return random.choice(DONOVAN_ROASTS_DIRECT)
+
+
 async def is_hot_take(text):
     try:
         response = await groq_client.chat.completions.create(
@@ -702,7 +722,9 @@ async def on_message(message):
     if bot_mentioned:
         try:
             if is_donovan(message.author):
-                await message.channel.send(random.choice(DONOVAN_ROASTS_DIRECT))
+                question = get_question(message)
+                comeback = await argue_with_donovan(question if question else "hey")
+                await message.channel.send(comeback)
                 return
 
             question = get_question(message)
