@@ -523,16 +523,16 @@ async def argue_with_donovan(message_content):
 
 
 SPORTS_TRIVIA_FALLBACKS = [
-    ("What trophy is awarded to the NHL champion?", "Stanley Cup"),
-    ("How many periods are in a regulation NHL game?", "3"),
-    ("How many players does each NFL team have on the field at once?", "11"),
-    ("How many points is a touchdown worth in the NFL?", "6"),
-    ("How many players are on the court per NBA team at once?", "5"),
-    ("How many points is an NBA three-pointer worth?", "3"),
-    ("What NBA team has won the most championships?", "Celtics"),
-    ("How many minutes are in an NBA quarter?", "12"),
-    ("What is the name of the NFL championship game?", "Super Bowl"),
-    ("How many rings did Michael Jordan win with the Bulls?", "6"),
+    ("How many Super Bowl titles did Tom Brady win in his career?", "7"),
+    ("What team did LeBron James win his first NBA championship with in 2012?", "Heat"),
+    ("Which NHL team won the Stanley Cup in 2023?", "Golden Knights"),
+    ("Who was the NFL MVP in 2022?", "Mahomes"),
+    ("What team did Michael Jordan lead to six NBA championships in the 1990s?", "Bulls"),
+    ("Which quarterback led the Kansas City Chiefs to multiple Super Bowl wins?", "Mahomes"),
+    ("What NHL team did Wayne Gretzky finish his career with in 1999?", "Rangers"),
+    ("Which team won the NBA championship in 2016 after being down 3-1?", "Cavaliers"),
+    ("Who scored the overtime goal for Canada in the 2010 Olympic gold medal hockey game?", "Crosby"),
+    ("What NFL team did Peyton Manning win his second Super Bowl with?", "Broncos"),
 ]
 
 
@@ -545,7 +545,8 @@ async def generate_sports_question():
                     "role": "system",
                     "content": (
                         "You are a sports trivia question generator. Generate one trivia question about "
-                        "NHL hockey, NFL football, or NBA basketball. Make it challenging but fair.\n"
+                        "NHL hockey, NFL football, or NBA basketball. Questions must be about events, players, "
+                        "or records from 1990 to present only. Make it challenging but fair.\n"
                         "Rules for the ANSWER field:\n"
                         "- Use the shortest recognizable form (last name only for players is fine)\n"
                         "- No extra words, no punctuation, no explanations\n"
