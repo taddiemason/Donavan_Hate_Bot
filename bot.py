@@ -539,26 +539,27 @@ SPORTS_TRIVIA_FALLBACKS = [
 async def generate_sports_question():
     try:
         response = await groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {
                     "role": "system",
                     "content": (
                         "You are a sports trivia question generator. Generate one trivia question about "
-                        "NHL hockey, NFL football, or NBA basketball. Questions must be about events, players, "
-                        "or records from 1990 to present only. Make it challenging but fair.\n"
-                        "Rules for the ANSWER field:\n"
-                        "- Use the shortest recognizable form (last name only for players is fine)\n"
-                        "- No extra words, no punctuation, no explanations\n"
-                        "- Just the name, number, or team — nothing else\n"
-                        "Respond in EXACTLY this format with nothing else:\n"
-                        "QUESTION: <the question>\n"
-                        "ANSWER: <1-3 words max, no punctuation>"
+                        "NHL hockey, NFL football, or NBA basketball from 1990 to present.\n"
+                        "STRICT RULES:\n"
+                        "- Only generate questions about famous, well-known facts you are 100% certain are correct\n"
+                        "- Stick to Super Bowl MVPs, championship winners, famous records by household-name players\n"
+                        "- Do NOT generate questions about obscure statistics or records you are not sure about\n"
+                        "- ANSWER must be a last name only (for players) or a team name — nothing else\n"
+                        "- Never put numbers, stats, or extra words in the ANSWER field\n"
+                        "Respond in EXACTLY this format:\n"
+                        "QUESTION: <question>\n"
+                        "ANSWER: <last name or team name only>"
                     ),
                 },
                 {"role": "user", "content": "Generate a sports trivia question."},
             ],
-            max_tokens=80,
+            max_tokens=100,
         )
         text = response.choices[0].message.content.strip()
         question, answer = "", ""
@@ -566,7 +567,11 @@ async def generate_sports_question():
             if line.startswith("QUESTION:"):
                 question = line.replace("QUESTION:", "").strip()
             elif line.startswith("ANSWER:"):
-                answer = line.replace("ANSWER:", "").strip().rstrip(".")
+                raw = line.replace("ANSWER:", "").strip()
+                # Keep only the first 1-3 words, strip punctuation and trailing numbers
+                import re
+                raw = re.sub(r'[^\w\s]', '', raw).strip()
+                answer = " ".join(raw.split()[:3])
         if question and answer:
             return question, answer
     except Exception as e:
@@ -582,9 +587,12 @@ async def judge_sports_answer(question, expected, user_answer):
                 {
                     "role": "system",
                     "content": (
-                        "You are a sports trivia judge. Given a question, the correct answer, and a player's answer, "
-                        "decide if the player is correct. Accept last names only, common nicknames, reasonable alternate "
-                        "spellings, and minor typos. Reply with ONLY 'yes' or 'no'."
+                        "You are a strict sports trivia judge. Your only job is to decide if a player's answer "
+                        "is correct. Be strict about factual accuracy — do NOT accept an answer just because "
+                        "it sounds plausible. A wrong player name is always wrong, even if the player is famous. "
+                        "Accept: last name only, common nicknames, minor spelling variations of the correct answer. "
+                        "Reject: any different person or team, even a famous one. "
+                        "Reply with ONLY 'yes' or 'no'."
                     ),
                 },
                 {
