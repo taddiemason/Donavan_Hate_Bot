@@ -1238,13 +1238,12 @@ async def dice_duel(ctx, opponent: discord.Member = None, amount: int = None):
 
     while True:
         await asyncio.sleep(1)
-        a = (random.randint(1, 6), random.randint(1, 6))
-        b = (random.randint(1, 6), random.randint(1, 6))
-        a_total, b_total = sum(a), sum(b)
+        a_total = random.randint(1, 100)
+        b_total = random.randint(1, 100)
 
         await ctx.send(
-            f"🎲 **{ctx.author.display_name}:** `[{a[0]}][{a[1]}]` = **{a_total}**\n"
-            f"🎲 **{opponent.display_name}:** `[{b[0]}][{b[1]}]` = **{b_total}**"
+            f"🎲 **{ctx.author.display_name}:** **{a_total}**\n"
+            f"🎲 **{opponent.display_name}:** **{b_total}**"
         )
 
         if a_total > b_total:
@@ -1345,7 +1344,7 @@ async def commands_list(ctx):
         "**`!slots <amount>`** — Slot machine. Match symbols for big payouts.\n"
         "**`!trivia`** — First to answer wins 50 coins.\n"
         "**`!guessroast`** — Roast posted with name blanked, guess who it's about.\n"
-        "**`!dice @user <amount>`** — Challenge someone to a dice duel. Highest 2d6 roll wins the pot. Ties re-roll.\n"
+        "**`!dice @user <amount>`** — Challenge someone to a dice duel. Roll 1-100, highest wins the pot. Ties re-roll.\n"
         "**`!highlow <amount>`** — Guess higher or lower, chain correct answers for a multiplier.\n"
         "**`!blackjack [bet]`** — Multiplayer blackjack vs the dealer. Bet defaults to 10 coins. Others can join before the round starts.\n"
         "**`!lottery <amount>`** — Buy lottery tickets (10 coins each). Drawn every Sunday at 9 PM EST.\n"
