@@ -1187,6 +1187,78 @@ async def blackjack(ctx, amount: int = 10):
     await ctx.send("\n".join(result_lines))
 
 
+@bot.command(name="dice")
+async def dice_duel(ctx, opponent: discord.Member = None, amount: int = None):
+    if not opponent or not amount or amount <= 0:
+        await ctx.send("Usage: `!dice @user <amount>`")
+        return
+    if opponent.id == ctx.author.id:
+        await ctx.send("You can't challenge yourself.")
+        return
+    if opponent.bot:
+        await ctx.send("You can't challenge a bot. Coward.")
+        return
+
+    if not spend_coins(ctx.author.id, amount):
+        bal = load_economy()["balances"].get(str(ctx.author.id), 0)
+        await ctx.send(f"Not enough coins. You have **{bal}**.")
+        return
+
+    msg = await ctx.send(
+        f"🎲 **DICE DUEL**\n\n"
+        f"**{ctx.author.display_name}** challenges **{opponent.mention}** for **{amount} coins** a side!\n\n"
+        f"React ✅ to accept or ❌ to decline. (30 seconds)"
+    )
+    await msg.add_reaction("✅")
+    await msg.add_reaction("❌")
+
+    def check(reaction, user):
+        return user.id == opponent.id and str(reaction.emoji) in ("✅", "❌") and reaction.message.id == msg.id
+
+    try:
+        reaction, _ = await bot.wait_for("reaction_add", check=check, timeout=30)
+    except asyncio.TimeoutError:
+        add_coins(ctx.author.id, amount)
+        await ctx.send(f"⏱️ **{opponent.display_name}** never showed up. {ctx.author.mention} refunded.")
+        return
+
+    if str(reaction.emoji) == "❌":
+        add_coins(ctx.author.id, amount)
+        await ctx.send(f"❌ **{opponent.display_name}** backed out. {ctx.author.mention} refunded.")
+        return
+
+    if not spend_coins(opponent.id, amount):
+        add_coins(ctx.author.id, amount)
+        bal = load_economy()["balances"].get(str(opponent.id), 0)
+        await ctx.send(f"**{opponent.display_name}** accepted but only has **{bal} coins**. Challenge cancelled, {ctx.author.mention} refunded.")
+        return
+
+    pot = amount * 2
+    await ctx.send(f"✅ **{opponent.display_name}** accepted! Pot: **{pot} coins**. Rolling...")
+
+    while True:
+        await asyncio.sleep(1)
+        a = (random.randint(1, 6), random.randint(1, 6))
+        b = (random.randint(1, 6), random.randint(1, 6))
+        a_total, b_total = sum(a), sum(b)
+
+        await ctx.send(
+            f"🎲 **{ctx.author.display_name}:** `[{a[0]}][{a[1]}]` = **{a_total}**\n"
+            f"🎲 **{opponent.display_name}:** `[{b[0]}][{b[1]}]` = **{b_total}**"
+        )
+
+        if a_total > b_total:
+            add_coins(ctx.author.id, pot)
+            await ctx.send(f"🏆 **{ctx.author.display_name}** wins and takes **{pot} coins!**")
+            break
+        elif b_total > a_total:
+            add_coins(opponent.id, pot)
+            await ctx.send(f"🏆 **{opponent.display_name}** wins and takes **{pot} coins!**")
+            break
+        else:
+            await ctx.send("🤝 **TIE — rolling again!**")
+
+
 @bot.command(name="lottery")
 async def lottery(ctx, amount: int = None):
     if not amount or amount < 10:
@@ -1273,6 +1345,7 @@ async def commands_list(ctx):
         "**`!slots <amount>`** — Slot machine. Match symbols for big payouts.\n"
         "**`!trivia`** — First to answer wins 50 coins.\n"
         "**`!guessroast`** — Roast posted with name blanked, guess who it's about.\n"
+        "**`!dice @user <amount>`** — Challenge someone to a dice duel. Highest 2d6 roll wins the pot. Ties re-roll.\n"
         "**`!highlow <amount>`** — Guess higher or lower, chain correct answers for a multiplier.\n"
         "**`!blackjack [bet]`** — Multiplayer blackjack vs the dealer. Bet defaults to 10 coins. Others can join before the round starts.\n"
         "**`!lottery <amount>`** — Buy lottery tickets (10 coins each). Drawn every Sunday at 9 PM EST.\n"
