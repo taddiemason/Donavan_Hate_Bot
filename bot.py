@@ -454,7 +454,26 @@ def load_economy():
     return {"balances": {}, "bounties": [], "insurance_expires": None,
             "pending_upgrades": {}, "inventory": {}, "market_listings": [],
             "slow_clap_pending": 0,
-            "next_bounty_id": 1, "next_listing_id": 1}
+            "next_bounty_id": 1, "next_listing_id": 1,
+            "shop_rotation": None, "shop_rotation_expires": None}
+
+
+def get_shop_rotation():
+    eco = load_economy()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    expires_str = eco.get("shop_rotation_expires")
+    if expires_str:
+        expires = datetime.datetime.fromisoformat(expires_str)
+    else:
+        expires = None
+    if not expires or now >= expires:
+        rotation = random.sample(list(SHOP_ITEMS.keys()), 5)
+        next_expires = (now + datetime.timedelta(hours=24)).isoformat()
+        eco["shop_rotation"] = rotation
+        eco["shop_rotation_expires"] = next_expires
+        save_economy(eco)
+        return rotation, datetime.datetime.fromisoformat(next_expires)
+    return eco["shop_rotation"], expires
 
 
 def save_economy(data):
@@ -1653,15 +1672,28 @@ async def leaderboard(ctx):
 
 @bot.command(name="shop")
 async def shop(ctx):
-    lines = [f"**{v['name']}** (`{k}`) — {v['cost']} coins\n_{v['description']}_"
-             for k, v in SHOP_ITEMS.items()]
-    await ctx.send("🛒 **Roast Shop**\n\n" + "\n\n".join(lines) + "\n\nUse `!buy <item>` to purchase.")
+    rotation, expires = get_shop_rotation()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    seconds_left = int((expires - now).total_seconds())
+    hours_left = seconds_left // 3600
+    minutes_left = (seconds_left % 3600) // 60
+    lines = [f"**{SHOP_ITEMS[k]['name']}** (`{k}`) — {SHOP_ITEMS[k]['cost']} coins\n_{SHOP_ITEMS[k]['description']}_"
+             for k in rotation if k in SHOP_ITEMS]
+    await ctx.send(
+        f"🛒 **Roast Shop** — Today's Rotation _(refreshes in {hours_left}h {minutes_left}m)_\n\n"
+        + "\n\n".join(lines)
+        + "\n\nUse `!buy <item>` to purchase."
+    )
 
 
 @bot.command(name="buy")
 async def buy_item(ctx, item_name: str = None):
     if not item_name or item_name.lower() not in SHOP_ITEMS:
-        await ctx.send(f"Unknown item. Use `!shop` to see available items.")
+        await ctx.send(f"Unknown item. Use `!shop` to see today's available items.")
+        return
+    rotation, _ = get_shop_rotation()
+    if item_name.lower() not in rotation:
+        await ctx.send(f"**{SHOP_ITEMS[item_name.lower()]['name']}** isn't in today's rotation. Check `!shop` for what's available.")
         return
     item = SHOP_ITEMS[item_name.lower()]
     if not spend_coins(ctx.author.id, item["cost"]):
