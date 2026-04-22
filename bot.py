@@ -2041,7 +2041,7 @@ async def toggle_tts(ctx, state: str = None):
 @bot.command(name="update")
 @commands.has_permissions(administrator=True)
 async def update_bot(ctx):
-    import subprocess, sys
+    import subprocess
     await ctx.send("⬇️ Pulling latest changes...")
     result = subprocess.run(["git", "pull"], capture_output=True, text=True)
     output = result.stdout.strip() or result.stderr.strip() or "No output."
@@ -2050,7 +2050,7 @@ async def update_bot(ctx):
         await ctx.send("❌ Git pull failed. Not restarting.")
         return
     await ctx.send("✅ Update complete. Restarting...")
-    os.execv(sys.executable, [sys.executable] + sys.argv)
+    subprocess.run(["pkill", "-f", "bot.py"])
 
 
 bot.run(os.getenv("DISCORD_TOKEN"))
