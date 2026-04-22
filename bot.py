@@ -130,6 +130,71 @@ SHOP_ITEMS = {
         "cost": 500,
         "description": "Maximum Hatebot roast + forces TTS even if it's off",
     },
+    "eulogy": {
+        "name": "Eulogy",
+        "cost": 150,
+        "description": "HateBot delivers a dramatic funeral eulogy for Donovan's dignity, as if it has already passed away",
+    },
+    "wanted_poster": {
+        "name": "Wanted Poster",
+        "cost": 175,
+        "description": "HateBot generates a fake FBI wanted poster describing Donovan's crimes against the server",
+    },
+    "therapy_session": {
+        "name": "Therapy Session",
+        "cost": 200,
+        "description": "HateBot roleplays as Donovan's therapist and reads his 'case notes' aloud in the channel",
+    },
+    "cease_and_desist": {
+        "name": "Cease & Desist",
+        "cost": 225,
+        "description": "HateBot drafts a formal legal letter demanding Donovan stop being himself immediately",
+    },
+    "linkedin_post": {
+        "name": "LinkedIn Post",
+        "cost": 250,
+        "description": "HateBot writes a cringe corporate LinkedIn post from Donovan's perspective hyping up his latest L as a 'growth opportunity'",
+    },
+    "documentary": {
+        "name": "Documentary",
+        "cost": 325,
+        "description": "HateBot generates a Ken Burns-style documentary narration about a recent Donovan moment, complete with dramatic pauses",
+    },
+    "legacy_mode": {
+        "name": "Legacy Mode",
+        "cost": 450,
+        "description": "HateBot compiles Donovan's greatest hits — his worst moments from server history — into one devastating highlight reel recap",
+    },
+    "motivational_poster": {
+        "name": "Motivational Poster",
+        "cost": 200,
+        "description": "HateBot generates a fake inspirational quote attributed to Donovan paired with the most embarrassing context possible",
+    },
+    "autopsy_report": {
+        "name": "Autopsy Report",
+        "cost": 225,
+        "description": "HateBot produces a clinical medical examiner's report on the cause of death of Donovan's credibility",
+    },
+    "wikipedia_page": {
+        "name": "Wikipedia Page",
+        "cost": 325,
+        "description": "HateBot generates a fake Wikipedia article about Donovan complete with a controversies section",
+    },
+    "parole_hearing": {
+        "name": "Parole Hearing",
+        "cost": 350,
+        "description": "HateBot conducts a formal parole board hearing to determine whether Donovan has earned the right to be taken seriously again — verdict always denied",
+    },
+    "dossier": {
+        "name": "Dossier",
+        "cost": 400,
+        "description": "HateBot compiles and presents a full classified intelligence briefing on Donovan, his known associates, and his pattern of behavior",
+    },
+    "state_of_the_union": {
+        "name": "State of the Union",
+        "cost": 475,
+        "description": "HateBot delivers a presidential address formally assessing the ongoing Donovan situation, its impact on national morale, and the administration's response plan",
+    },
 }
 
 tts_enabled = True
@@ -965,6 +1030,58 @@ async def on_message(message):
                         await message.channel.send("⛔ Donovan has been exiled for 60 seconds. Enjoy the peace.")
                     except Exception:
                         await message.channel.send("⛔ Exile failed — bot needs Moderate Members permission.")
+
+            if consume_upgrade(message.author.id, "eulogy"):
+                eulogy = await ask_openai("Write a short dramatic funeral eulogy (3-5 sentences) for Donovan's dignity, as if it has already passed away. Be theatrical, savage, and treat it as a genuine loss to no one.")
+                await message.channel.send(f"⚰️ **EULOGY FOR DONOVAN'S DIGNITY:**\n{eulogy}")
+
+            if consume_upgrade(message.author.id, "wanted_poster"):
+                poster = await ask_openai("Generate a fake FBI wanted poster description for Donovan. Include: name, aliases, known crimes against the server, last known location, reward amount, and a warning to approach with low expectations.")
+                await message.channel.send(f"🪧 **WANTED** 🪧\n{poster}")
+
+            if consume_upgrade(message.author.id, "therapy_session"):
+                therapy = await ask_openai("Roleplay as Donovan's therapist reading case notes aloud. Include diagnosis, presenting complaints, therapist observations, and prognosis. Make it clinical but devastatingly accurate.")
+                await message.channel.send(f"🛋️ **THERAPY SESSION — CASE NOTES:**\n{therapy}")
+
+            if consume_upgrade(message.author.id, "cease_and_desist"):
+                legal = await ask_openai("Draft a formal cease and desist letter demanding Donovan immediately stop being himself. Use legal language, cite specific offenses against the server, and threaten consequences. Keep it under 6 sentences.")
+                await message.channel.send(f"⚖️ **CEASE & DESIST:**\n{legal}")
+
+            if consume_upgrade(message.author.id, "linkedin_post"):
+                linkedin = await ask_openai("Write a cringe corporate LinkedIn post from Donovan's perspective. He is spinning his latest embarrassing L as a 'growth opportunity' and 'learning experience'. Include hashtags. Make it painfully on-brand for LinkedIn.")
+                await message.channel.send(f"💼 **DONOVAN'S LINKEDIN POST:**\n{linkedin}")
+
+            if consume_upgrade(message.author.id, "documentary"):
+                doc = await ask_openai("Write a Ken Burns-style documentary narration (4-6 sentences) about a recent Donovan moment. Use a slow, grave, reflective tone. Include dramatic pauses indicated by '...' and treat the subject as historically significant.")
+                await message.channel.send(f"🎬 **DOCUMENTARY NARRATION:**\n{doc}")
+
+            if consume_upgrade(message.author.id, "legacy_mode"):
+                legacy = await ask_openai("Compile a devastating highlight reel recap of Donovan's greatest hits — his worst moments, biggest Ls, and most embarrassing behavior. Present it as a formal legacy retrospective. 5-7 sentences.")
+                await message.channel.send(f"🏆 **DONOVAN'S LEGACY — HIGHLIGHT REEL:**\n{legacy}")
+
+            if consume_upgrade(message.author.id, "motivational_poster"):
+                poster = await ask_openai("Generate a fake motivational poster. Include a short inspirational quote falsely attributed to Donovan, followed by the most embarrassing context that makes the quote hilarious. Format it like a real motivational poster caption.")
+                await message.channel.send(f"🖼️ **MOTIVATIONAL POSTER:**\n{poster}")
+
+            if consume_upgrade(message.author.id, "autopsy_report"):
+                autopsy = await ask_openai("Write a clinical medical examiner's autopsy report on the cause of death of Donovan's credibility. Include time of death, cause of death, contributing factors, and examiner's notes. Keep it formal and devastating.")
+                await message.channel.send(f"🔬 **AUTOPSY REPORT — DONOVAN'S CREDIBILITY:**\n{autopsy}")
+
+            if consume_upgrade(message.author.id, "wikipedia_page"):
+                wiki = await ask_openai("Write a fake Wikipedia-style article about Donovan. Include sections for Early Life, Known For, Controversies, and Legacy. Use encyclopedic tone. The controversies section should be the longest.")
+                await message.channel.send(f"📖 **WIKIPEDIA: DONOVAN**\n{wiki}")
+
+            if consume_upgrade(message.author.id, "parole_hearing"):
+                parole = await ask_openai("Conduct a formal parole board hearing transcript for Donovan, who is seeking the right to be taken seriously again. Include board questions, his responses, deliberation, and the final verdict — which is always denied. 5-7 sentences.")
+                await message.channel.send(f"🔨 **PAROLE HEARING — VERDICT: DENIED:**\n{parole}")
+
+            if consume_upgrade(message.author.id, "dossier"):
+                dossier = await ask_openai("Present a full classified intelligence dossier on Donovan. Include: codename, threat level, known associates, behavioral patterns, noted weaknesses, and current status. Use spy/intelligence report formatting.")
+                await message.channel.send(f"🗂️ **CLASSIFIED DOSSIER: DONOVAN**\n{dossier}")
+
+            if consume_upgrade(message.author.id, "state_of_the_union"):
+                sotu = await ask_openai("Deliver a presidential State of the Union address formally assessing the ongoing Donovan situation. Address the nation, assess the threat to morale, outline the administration's response plan, and close with hollow optimism. 5-7 sentences.")
+                await message.channel.send(f"🎙️ **STATE OF THE UNION — THE DONOVAN SITUATION:**\n{sotu}")
 
             coin_reward = 20 if is_double_coin_day() else 10
             if is_double_coin_day():
