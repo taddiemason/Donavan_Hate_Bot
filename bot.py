@@ -2066,18 +2066,17 @@ async def leaderboard(ctx):
         return round(cash + portfolio + futures_pnl + options_val, 2)
 
     top = sorted(eco["balances"].keys(), key=net_worth, reverse=True)[:5]
-    medals = ["🥇", "🥈", "🥉", "4.", "5."]
     lines = []
-    for i, uid in enumerate(top):
+    for i, uid in enumerate(top, 1):
         member = ctx.guild.get_member(int(uid))
         name = member.display_name if member else "Unknown"
-        cash = eco["balances"].get(str(uid), 0)
+        cash = round(eco["balances"].get(str(uid), 0))
         total = net_worth(uid)
-        portfolio = round(total - cash, 2)
+        portfolio = round(total - cash)
         if portfolio:
-            lines.append(f"{medals[i]} **{name}** — {total:.0f} coins net worth _(cash: {cash} + investments: {portfolio:.0f})_")
+            lines.append(f"{i}. **{name}** — {total:.0f} coins net worth _(cash: {cash} + investments: {portfolio})_")
         else:
-            lines.append(f"{medals[i]} **{name}** — {total:.0f} coins")
+            lines.append(f"{i}. **{name}** — {total:.0f} coins")
     await ctx.send("💰 **Roast Coin Leaderboard** _(ranked by net worth)_\n" + "\n".join(lines))
 
 
