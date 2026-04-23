@@ -1,5 +1,6 @@
 import os
 import json
+import math
 import random
 import asyncio
 import tempfile
@@ -588,6 +589,73 @@ def get_portfolio_value(eco, uid):
     return round(total, 2)
 
 
+def init_derivatives(eco):
+    eco.setdefault("futures", {})
+    eco.setdefault("options", {})
+    eco.setdefault("next_derivative_id", 1)
+
+
+def calc_option_premium(spot, strike, option_type, days):
+    time_value = spot * 0.04 * math.sqrt(max(days, 0.5) / 7)
+    intrinsic = max(0, spot - strike) if option_type == "call" else max(0, strike - spot)
+    return round(max(intrinsic + time_value, spot * 0.01), 2)
+
+
+async def settle_expired_futures(eco, channel):
+    now = datetime.datetime.now(datetime.timezone.utc)
+    for uid, positions in list(eco.get("futures", {}).items()):
+        remaining = []
+        for pos in positions:
+            if now < datetime.datetime.fromisoformat(pos["expiry"]):
+                remaining.append(pos)
+                continue
+            price = eco["market"][pos["ticker"]]["price"]
+            pnl = (price - pos["entry_price"]) * pos["contracts"] if pos["direction"] == "long" \
+                else (pos["entry_price"] - price) * pos["contracts"]
+            pnl = round(pnl, 2)
+            returned = max(round(pos["margin"] + pnl, 2), 0)
+            eco["balances"][uid] = eco["balances"].get(uid, 0) + returned
+            pnl_str = f"+{pnl:.0f}" if pnl >= 0 else str(round(pnl))
+            if channel:
+                member = channel.guild.get_member(int(uid))
+                mention = member.mention if member else f"<@{uid}>"
+                await channel.send(
+                    f"📅 {mention} Futures **#{pos['id']}** settled: "
+                    f"**{pos['direction'].upper()} {pos['contracts']} ${pos['ticker']}** "
+                    f"${pos['entry_price']:.2f} → ${price:.2f} | P&L: **{pnl_str}** | Returned: **{returned:.0f} coins**"
+                )
+        eco["futures"][uid] = remaining
+
+
+async def expire_options(eco, channel):
+    now = datetime.datetime.now(datetime.timezone.utc)
+    for uid, opts in list(eco.get("options", {}).items()):
+        remaining = []
+        for opt in opts:
+            if opt.get("exercised"):
+                continue
+            if now < datetime.datetime.fromisoformat(opt["expiry"]):
+                remaining.append(opt)
+                continue
+            price = eco["market"][opt["ticker"]]["price"]
+            intrinsic = (price - opt["strike"]) * opt["contracts"] if opt["option_type"] == "call" \
+                else (opt["strike"] - price) * opt["contracts"]
+            if intrinsic > 0:
+                payout = round(intrinsic, 2)
+                eco["balances"][uid] = eco["balances"].get(uid, 0) + payout
+                result = f"auto-exercised ✅ payout: **{payout:.0f} coins**"
+            else:
+                result = "expired worthless 💀"
+            if channel:
+                member = channel.guild.get_member(int(uid))
+                mention = member.mention if member else f"<@{uid}>"
+                await channel.send(
+                    f"📅 {mention} Option **#{opt['id']}** "
+                    f"({opt['option_type'].upper()} ${opt['ticker']} strike ${opt['strike']:.2f}) {result}"
+                )
+        eco["options"][uid] = remaining
+
+
 def save_count(count):
     with open(COUNTER_FILE, "w") as f:
         json.dump({"count": count}, f)
@@ -1073,12 +1141,26 @@ async def meme_stock_drift():
     save_economy(eco)
 
 
+@tasks.loop(minutes=5)
+async def derivatives_settlement():
+    if not ROAST_CHANNEL_ID:
+        return
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    channel = bot.get_channel(ROAST_CHANNEL_ID)
+    await settle_expired_futures(eco, channel)
+    await expire_options(eco, channel)
+    save_economy(eco)
+
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
     scheduled_roast.start()
     weekly_recap.start()
     limit_order_checker.start()
+    derivatives_settlement.start()
     meme_stock_drift.start()
     asyncio.ensure_future(tts_worker())
 
@@ -2458,6 +2540,229 @@ async def my_orders(ctx):
             f"**#{o['id']}** — {o['order_type'].upper()} {o['shares']} **${o['ticker']}** @ **${o['limit_price']:.2f}**"
         )
     lines.append("\nUse `!cancellimit <id>` to cancel.")
+    await ctx.send("\n".join(lines))
+
+
+@bot.command(name="futures")
+async def futures_cmd(ctx, direction: str = None, ticker: str = None, contracts: int = None):
+    if not all([direction, ticker, contracts]) or contracts <= 0:
+        await ctx.send(
+            "Usage: `!futures <long|short> <TICKER> <contracts>` — 7-day contract, 20% margin.\n"
+            "Example: `!futures long DONOVAN 10`"
+        )
+        return
+    direction = direction.lower()
+    ticker = ticker.upper()
+    if direction not in ("long", "short"):
+        await ctx.send("Direction must be `long` or `short`.")
+        return
+    if ticker not in MARKET_STOCKS:
+        await ctx.send(f"Unknown ticker. Available: {', '.join(f'${t}' for t in MARKET_STOCKS)}")
+        return
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    price = eco["market"][ticker]["price"]
+    margin = round(price * contracts * 0.20, 2)
+    uid = str(ctx.author.id)
+    bal = eco["balances"].get(uid, 0)
+    if bal < margin:
+        await ctx.send(f"Need **{margin:.0f} coins** margin (20% of position). You have **{bal}**.")
+        return
+    eco["balances"][uid] = bal - margin
+    deriv_id = eco["next_derivative_id"]
+    eco["next_derivative_id"] += 1
+    expiry = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)).isoformat()
+    eco["futures"].setdefault(uid, []).append({
+        "id": deriv_id,
+        "ticker": ticker,
+        "contracts": contracts,
+        "direction": direction,
+        "entry_price": price,
+        "margin": margin,
+        "expiry": expiry,
+    })
+    save_economy(eco)
+    emoji = "📈" if direction == "long" else "📉"
+    await ctx.send(
+        f"{emoji} Opened **{direction.upper()}** futures: **{contracts}x ${ticker}** @ **${price:.2f}**. "
+        f"Margin held: **{margin:.0f} coins**. Settles in 7 days. ID: **#{deriv_id}**"
+    )
+
+
+@bot.command(name="closefutures")
+async def close_futures_cmd(ctx, deriv_id: int = None):
+    if not deriv_id:
+        await ctx.send("Usage: `!closefutures <id>`")
+        return
+    uid = str(ctx.author.id)
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    positions = eco["futures"].get(uid, [])
+    pos = next((p for p in positions if p["id"] == deriv_id), None)
+    if not pos:
+        await ctx.send(f"Futures contract **#{deriv_id}** not found.")
+        return
+    price = eco["market"][pos["ticker"]]["price"]
+    pnl = (price - pos["entry_price"]) * pos["contracts"] if pos["direction"] == "long" \
+        else (pos["entry_price"] - price) * pos["contracts"]
+    pnl = round(pnl, 2)
+    returned = max(round(pos["margin"] + pnl, 2), 0)
+    eco["balances"][uid] = eco["balances"].get(uid, 0) + returned
+    eco["futures"][uid] = [p for p in positions if p["id"] != deriv_id]
+    save_economy(eco)
+    pnl_str = f"+{pnl:.0f}" if pnl >= 0 else str(round(pnl))
+    await ctx.send(
+        f"✅ Closed futures **#{deriv_id}**: **{pos['direction'].upper()} {pos['contracts']}x ${pos['ticker']}**. "
+        f"P&L: **{pnl_str} coins**. Returned: **{returned:.0f} coins**."
+    )
+
+
+@bot.command(name="myfutures")
+async def my_futures_cmd(ctx):
+    uid = str(ctx.author.id)
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    positions = eco["futures"].get(uid, [])
+    if not positions:
+        await ctx.send("No open futures. Use `!futures long/short <TICKER> <contracts>` to open one.")
+        return
+    now = datetime.datetime.now(datetime.timezone.utc)
+    lines = ["📅 **Your Open Futures:**\n"]
+    for pos in positions:
+        price = eco["market"][pos["ticker"]]["price"]
+        pnl = (price - pos["entry_price"]) * pos["contracts"] if pos["direction"] == "long" \
+            else (pos["entry_price"] - price) * pos["contracts"]
+        pnl = round(pnl, 2)
+        pnl_str = f"+{pnl:.0f}" if pnl >= 0 else str(round(pnl))
+        days_left = max(0, (datetime.datetime.fromisoformat(pos["expiry"]) - now).days)
+        lines.append(
+            f"**#{pos['id']}** {pos['direction'].upper()} **{pos['contracts']}x ${pos['ticker']}** "
+            f"@ ${pos['entry_price']:.2f} | Now: ${price:.2f} | P&L: **{pnl_str}** | {days_left}d left"
+        )
+    lines.append("\nUse `!closefutures <id>` to close early.")
+    await ctx.send("\n".join(lines))
+
+
+@bot.command(name="buyoption")
+async def buy_option_cmd(ctx, option_type: str = None, ticker: str = None, contracts: int = None, strike: float = None, days: int = 7):
+    if not all([option_type, ticker, contracts, strike]) or contracts <= 0 or strike <= 0:
+        await ctx.send(
+            "Usage: `!buyoption <call|put> <TICKER> <contracts> <strike> [days=7]`\n"
+            "Example: `!buyoption call DONOVAN 10 85 7`"
+        )
+        return
+    option_type = option_type.lower()
+    ticker = ticker.upper()
+    if option_type not in ("call", "put"):
+        await ctx.send("Option type must be `call` or `put`.")
+        return
+    if ticker not in MARKET_STOCKS:
+        await ctx.send(f"Unknown ticker. Available: {', '.join(f'${t}' for t in MARKET_STOCKS)}")
+        return
+    if not 1 <= days <= 30:
+        await ctx.send("Expiry must be between 1 and 30 days.")
+        return
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    spot = eco["market"][ticker]["price"]
+    premium_per = calc_option_premium(spot, strike, option_type, days)
+    total_premium = round(premium_per * contracts, 2)
+    uid = str(ctx.author.id)
+    bal = eco["balances"].get(uid, 0)
+    if bal < total_premium:
+        await ctx.send(
+            f"Premium costs **{total_premium:.0f} coins** (${premium_per:.2f}/contract). You have **{bal}**."
+        )
+        return
+    eco["balances"][uid] = bal - total_premium
+    deriv_id = eco["next_derivative_id"]
+    eco["next_derivative_id"] += 1
+    expiry = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=days)).isoformat()
+    eco["options"].setdefault(uid, []).append({
+        "id": deriv_id,
+        "ticker": ticker,
+        "option_type": option_type,
+        "contracts": contracts,
+        "strike": strike,
+        "premium_paid": total_premium,
+        "expiry": expiry,
+        "exercised": False,
+    })
+    save_economy(eco)
+    itm = "ITM" if (option_type == "call" and spot > strike) or (option_type == "put" and spot < strike) else "OTM"
+    await ctx.send(
+        f"✅ Bought **{contracts}x {option_type.upper()} ${ticker}** strike **${strike:.2f}** ({itm}, spot: ${spot:.2f}). "
+        f"Premium: **{total_premium:.0f} coins**. Expires in {days}d. ID: **#{deriv_id}**"
+    )
+
+
+@bot.command(name="exercise")
+async def exercise_option_cmd(ctx, deriv_id: int = None):
+    if not deriv_id:
+        await ctx.send("Usage: `!exercise <id>`")
+        return
+    uid = str(ctx.author.id)
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    opt = next((o for o in eco["options"].get(uid, []) if o["id"] == deriv_id and not o.get("exercised")), None)
+    if not opt:
+        await ctx.send(f"Option **#{deriv_id}** not found or already exercised.")
+        return
+    if datetime.datetime.now(datetime.timezone.utc) > datetime.datetime.fromisoformat(opt["expiry"]):
+        await ctx.send(f"Option **#{deriv_id}** has already expired.")
+        return
+    price = eco["market"][opt["ticker"]]["price"]
+    intrinsic = (price - opt["strike"]) * opt["contracts"] if opt["option_type"] == "call" \
+        else (opt["strike"] - price) * opt["contracts"]
+    if intrinsic <= 0:
+        await ctx.send(
+            f"Option **#{deriv_id}** is out of the money. "
+            f"Spot: ${price:.2f}, Strike: ${opt['strike']:.2f} — nothing to exercise."
+        )
+        return
+    payout = round(intrinsic, 2)
+    eco["balances"][uid] = eco["balances"].get(uid, 0) + payout
+    opt["exercised"] = True
+    save_economy(eco)
+    net_pnl = round(payout - opt["premium_paid"], 2)
+    net_str = f"+{net_pnl:.0f}" if net_pnl >= 0 else str(round(net_pnl))
+    await ctx.send(
+        f"✅ Exercised **#{deriv_id}** ({opt['option_type'].upper()} ${opt['ticker']} @ ${opt['strike']:.2f}). "
+        f"Payout: **{payout:.0f} coins**. Net P&L: **{net_str} coins**."
+    )
+
+
+@bot.command(name="myoptions")
+async def my_options_cmd(ctx):
+    uid = str(ctx.author.id)
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    opts = [o for o in eco["options"].get(uid, []) if not o.get("exercised")]
+    if not opts:
+        await ctx.send("No open options. Use `!buyoption call/put <TICKER> <contracts> <strike>` to buy one.")
+        return
+    now = datetime.datetime.now(datetime.timezone.utc)
+    lines = ["🎯 **Your Open Options:**\n"]
+    for opt in opts:
+        spot = eco["market"][opt["ticker"]]["price"]
+        intrinsic = max(0, (spot - opt["strike"]) * opt["contracts"]) if opt["option_type"] == "call" \
+            else max(0, (opt["strike"] - spot) * opt["contracts"])
+        itm = (opt["option_type"] == "call" and spot > opt["strike"]) or \
+              (opt["option_type"] == "put" and spot < opt["strike"])
+        days_left = max(0, (datetime.datetime.fromisoformat(opt["expiry"]) - now).days)
+        status = "✅ ITM" if itm else "❌ OTM"
+        lines.append(
+            f"**#{opt['id']}** {opt['option_type'].upper()} **{opt['contracts']}x ${opt['ticker']}** "
+            f"strike ${opt['strike']:.2f} | Spot: ${spot:.2f} {status} | "
+            f"Value: {intrinsic:.0f} | Paid: {opt['premium_paid']:.0f} | {days_left}d left"
+        )
+    lines.append("\nUse `!exercise <id>` to exercise early.")
     await ctx.send("\n".join(lines))
 
 
