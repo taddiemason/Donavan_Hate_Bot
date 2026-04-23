@@ -868,10 +868,11 @@ async def generate_sports_question(sport, used_players=None):
         text = response.choices[0].message.content.strip()
         question, answer = "", ""
         for line in text.split("\n"):
-            if line.startswith("QUESTION:"):
-                question = line.replace("QUESTION:", "").strip()
-            elif line.startswith("ANSWER:"):
-                raw = line.replace("ANSWER:", "").strip()
+            upper = line.upper()
+            if upper.startswith("QUESTION:"):
+                question = line[line.index(":") + 1:].strip()
+            elif upper.startswith("ANSWER:"):
+                raw = line[line.index(":") + 1:].strip()
                 raw = re.sub(r'[^\w\s]', '', raw).strip()
                 answer = " ".join(raw.split()[:3])
         if question and answer:
@@ -1828,15 +1829,20 @@ async def sports_trivia(ctx):
                 return m.channel.id == channel_id and not m.author.bot and not m.content.startswith("!") and len(m.content.strip()) > 1
 
             winner = None
-            deadline = asyncio.get_event_loop().time() + 30
+            deadline = asyncio.get_running_loop().time() + 30
 
             while True:
-                remaining = deadline - asyncio.get_event_loop().time()
+                remaining = deadline - asyncio.get_running_loop().time()
                 if remaining <= 0:
                     break
                 try:
                     msg = await bot.wait_for("message", check=check, timeout=remaining)
-                    correct = await judge_sports_answer(question, answer, msg.content.strip())
+                    user_answer = msg.content.strip()
+                    # Skip slow AI judge for obvious chat messages to avoid blocking the loop
+                    if len(user_answer.split()) > 5:
+                        correct = answer.lower() in user_answer.lower()
+                    else:
+                        correct = await judge_sports_answer(question, answer, user_answer)
                     if correct:
                         winner = msg.author
                         break
