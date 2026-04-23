@@ -1162,6 +1162,45 @@ async def derivatives_settlement():
     save_economy(eco)
 
 
+@tasks.loop(minutes=5)
+async def margin_call_checker():
+    if not ROAST_CHANNEL_ID:
+        return
+    eco = load_economy()
+    init_market(eco)
+    channel = bot.get_channel(ROAST_CHANNEL_ID)
+    liquidations = []
+
+    for uid, positions in list(eco.get("short_positions", {}).items()):
+        for ticker in list(positions.keys()):
+            pos = positions[ticker]
+            price = eco["market"][ticker]["price"]
+            loss = (price - pos["avg_price"]) * pos["shares"]
+            # Margin call when loss wipes out 80% of posted collateral
+            if loss >= pos["collateral"] * 0.80:
+                pnl = round((pos["avg_price"] - price) * pos["shares"], 2)
+                returned = max(round(pos["collateral"] + pnl, 2), 0)
+                apply_price_impact(eco, ticker, pos["shares"], +1)
+                eco["balances"][uid] = eco["balances"].get(uid, 0) + returned
+                del eco["short_positions"][uid][ticker]
+                if not eco["short_positions"][uid]:
+                    del eco["short_positions"][uid]
+                liquidations.append((uid, ticker, pos["shares"], price, pnl, returned))
+
+    if liquidations:
+        save_economy(eco)
+        if channel:
+            for uid, ticker, shares, price, pnl, returned in liquidations:
+                member = channel.guild.get_member(int(uid))
+                mention = member.mention if member else f"<@{uid}>"
+                pnl_str = f"+{pnl:.0f}" if pnl >= 0 else str(round(pnl))
+                await channel.send(
+                    f"🚨 **MARGIN CALL** — {mention}'s short on **${ticker}** ({shares} shares) was "
+                    f"force-liquidated at **${price:.2f}**. "
+                    f"P&L: **{pnl_str} coins** | Returned: **{returned:.0f} coins**"
+                )
+
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
@@ -1169,6 +1208,7 @@ async def on_ready():
     weekly_recap.start()
     limit_order_checker.start()
     derivatives_settlement.start()
+    margin_call_checker.start()
     meme_stock_drift.start()
     asyncio.ensure_future(tts_worker())
 
