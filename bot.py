@@ -203,7 +203,6 @@ tts_queue = asyncio.Queue()
 trial_active = False
 guess_game_active = False
 trivia_active = False
-trivia_answer = None
 trivia_recent = {}
 guessroast_active = False
 highlow_games = {}
@@ -1292,13 +1291,7 @@ async def on_message(message):
                 del highlow_games[message.author.id]
                 await message.channel.send(f"💰 Cashed out at **{game['multiplier']}x**! You won **{winnings} coins**!")
 
-    # Trivia answer check
-    if trivia_active and trivia_answer and not message.author.bot:
-        if trivia_answer.lower() in message.content.lower():
-            globals()["trivia_active"] = False
-            reward = 50
-            add_coins(message.author.id, reward)
-            await message.channel.send(f"✅ {message.author.mention} got it! The answer was **{trivia_answer.title()}**. **+{reward} coins!**")
+    # Trivia answer check handled by wait_for inside the !trivia command
 
     # Guess the roast answer check
     if guessroast_active and not message.author.bot:
@@ -1614,24 +1607,28 @@ async def slots(ctx, amount: int = None):
 
 @bot.command(name="trivia")
 async def trivia(ctx):
-    global trivia_active, trivia_answer
+    global trivia_active
     if trivia_active:
         await ctx.send("A trivia question is already active!")
         return
     trivia_active = True
-    # Avoid repeating the last few questions by tracking recent ones per channel
-    recent = trivia_recent.get(ctx.channel.id, [])
-    pool = [q for q in TRIVIA_QUESTIONS if q["q"] not in recent] or TRIVIA_QUESTIONS
-    q = random.choice(pool)
-    recent.append(q["q"])
-    trivia_recent[ctx.channel.id] = recent[-5:]  # remember last 5
-    trivia_answer = q["a"]
-    await ctx.send(f"🧠 **TRIVIA** — First to answer wins **50 coins!**\n\n_{q['q']}_\n\nYou have 30 seconds!")
-    await asyncio.sleep(30)
-    if trivia_active:
+    try:
+        recent = trivia_recent.get(ctx.channel.id, [])
+        pool = [q for q in TRIVIA_QUESTIONS if q["q"] not in recent] or TRIVIA_QUESTIONS
+        q = random.choice(pool)
+        recent.append(q["q"])
+        trivia_recent[ctx.channel.id] = recent[-5:]
+        await ctx.send(f"🧠 **TRIVIA** — First to answer wins **50 coins!**\n\n_{q['q']}_\n\nYou have 30 seconds!")
+        def check(m):
+            return m.channel == ctx.channel and not m.author.bot and q["a"].lower() in m.content.lower()
+        try:
+            msg = await bot.wait_for("message", check=check, timeout=30)
+            add_coins(msg.author.id, 50)
+            await ctx.send(f"✅ {msg.author.mention} got it! The answer was **{q['a'].title()}**. **+50 coins!**")
+        except asyncio.TimeoutError:
+            await ctx.send(f"⏱️ Time's up! The answer was **{q['a'].title()}**.")
+    finally:
         trivia_active = False
-        trivia_answer = None
-        await ctx.send(f"⏱️ Time's up! The answer was **{q['a'].title()}**.")
 
 
 @bot.command(name="guessroast")
