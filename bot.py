@@ -396,6 +396,7 @@ MARKET_STOCKS = {
     "RUST":    {"base_price": 42.0,  "shares_outstanding": 5000,  "shortable": True},
     "BIGMAC":  {"base_price": 5.99,  "shares_outstanding": 5000,  "shortable": True},
     "TORTA":   {"base_price": 12.50, "shares_outstanding": 5000,  "shortable": True},
+    "TRUMP":   {"base_price": 75.0,  "shares_outstanding": 5000,  "shortable": True},
 }
 
 
@@ -1132,7 +1133,7 @@ async def meme_stock_drift():
     eco = load_economy()
     init_market(eco)
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    for ticker in ("RUST", "BIGMAC", "TORTA"):
+    for ticker in ("RUST", "BIGMAC", "TORTA", "TRUMP"):
         price = eco["market"][ticker]["price"]
         change_pct = random.uniform(-4.0, 4.0)
         new_price = max(round(price * (1 + change_pct / 100), 2), 0.01)
