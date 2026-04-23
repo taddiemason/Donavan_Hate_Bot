@@ -393,12 +393,12 @@ DONOVAN_STOCK_BASE = 100.0
 USER_STOCK_BASE = 10.0
 
 MARKET_STOCKS = {
-    "DONOVAN": {"base_price": 100.0, "shares_outstanding": 10000, "shortable": True, "dividend_rate": 0.005},
-    "RUST":    {"base_price": 42.0,  "shares_outstanding": 5000,  "shortable": True, "dividend_rate": 0.010},
-    "BIGMAC":  {"base_price": 5.99,  "shares_outstanding": 5000,  "shortable": True, "dividend_rate": 0.020},
-    "TORTA":   {"base_price": 12.50, "shares_outstanding": 5000,  "shortable": True, "dividend_rate": 0.015},
-    "TRUMP":   {"base_price": 75.0,  "shares_outstanding": 5000,  "shortable": True, "dividend_rate": 0.008},
-    "COCAINE": {"base_price": 420.0, "shares_outstanding": 2000,  "shortable": True, "dividend_rate": 0.003},
+    "DONOVAN": {"base_price": 100.0, "shares_outstanding": 10000, "shortable": True},
+    "RUST":    {"base_price": 42.0,  "shares_outstanding": 5000,  "shortable": True},
+    "BIGMAC":  {"base_price": 5.99,  "shares_outstanding": 5000,  "shortable": True},
+    "TORTA":   {"base_price": 12.50, "shares_outstanding": 5000,  "shortable": True},
+    "TRUMP":   {"base_price": 75.0,  "shares_outstanding": 5000,  "shortable": True},
+    "COCAINE": {"base_price": 420.0, "shares_outstanding": 2000,  "shortable": True},
 }
 
 
@@ -1232,36 +1232,6 @@ async def margin_call_checker():
             )
 
 
-@tasks.loop(time=datetime.time(hour=0, minute=0, tzinfo=ZoneInfo("America/New_York")))
-async def midnight_tasks():
-    if not ROAST_CHANNEL_ID:
-        return
-    eco = load_economy()
-    init_market(eco)
-    channel = bot.get_channel(ROAST_CHANNEL_ID)
-
-    payouts = {}
-    for uid, holdings in eco.get("portfolios", {}).items():
-        total = 0
-        for ticker, pos in holdings.items():
-            if ticker not in eco["market"] or ticker not in MARKET_STOCKS:
-                continue
-            rate = MARKET_STOCKS[ticker]["dividend_rate"]
-            payout = round(pos["shares"] * eco["market"][ticker]["price"] * rate)
-            total += payout
-        if total > 0:
-            eco["balances"][uid] = eco["balances"].get(uid, 0) + total
-            payouts[uid] = total
-
-    save_economy(eco)
-
-    if payouts and channel:
-        lines = ["💸 **Daily Dividends Paid Out**\n"]
-        for uid, amount in sorted(payouts.items(), key=lambda x: x[1], reverse=True):
-            member = channel.guild.get_member(int(uid))
-            name = member.display_name if member else f"<@{uid}>"
-            lines.append(f"  {name}: **+{amount} coins**")
-        await channel.send("\n".join(lines))
 
 
 @bot.event
@@ -1272,7 +1242,6 @@ async def on_ready():
     limit_order_checker.start()
     derivatives_settlement.start()
     margin_call_checker.start()
-    midnight_tasks.start()
     meme_stock_drift.start()
     asyncio.ensure_future(tts_worker())
 
@@ -2028,7 +1997,6 @@ async def stock_market(ctx):
         pct = round((change / prev * 100) if prev else 0, 1)
         trend = "📉" if change < 0 else "📈"
         vol = mdata.get("volume_today", 0)
-        div_pct = info["dividend_rate"] * 100
         shorted = sum(
             pos[ticker]["shares"]
             for pos in eco.get("short_positions", {}).values()
@@ -2036,7 +2004,7 @@ async def stock_market(ctx):
         )
         si_pct = round(shorted / info["shares_outstanding"] * 100, 1)
         si_str = f"  🔥 SI: {si_pct}%" if si_pct > 0 else ""
-        lines.append(f"**${ticker}** — ${price:.2f}  {trend} {change:+.2f} ({pct:+.1f}%)  Vol: {vol}  💸 {div_pct:.1f}%/day{si_str}")
+        lines.append(f"**${ticker}** — ${price:.2f}  {trend} {change:+.2f} ({pct:+.1f}%)  Vol: {vol}{si_str}")
 
     # Top portfolio holders
     all_uids = set(eco.get("portfolios", {}).keys()) | set(eco.get("short_positions", {}).keys())
