@@ -2039,16 +2039,46 @@ async def balance(ctx, member: discord.Member = None):
 @bot.command(name="leaderboard")
 async def leaderboard(ctx):
     eco = load_economy()
-    top = sorted(eco["balances"].items(), key=lambda x: x[1], reverse=True)[:5]
-    if not top:
+    init_market(eco)
+    init_derivatives(eco)
+    if not eco["balances"]:
         await ctx.send("Nobody has earned any Roast Coins yet.")
         return
+
+    def net_worth(uid):
+        uid = str(uid)
+        cash = eco["balances"].get(uid, 0)
+        portfolio = get_portfolio_value(eco, uid)
+        futures_pnl = sum(
+            (p["entry_price"] - eco["market"][p["ticker"]]["price"]) * p["contracts"]
+            if p["direction"] == "short"
+            else (eco["market"][p["ticker"]]["price"] - p["entry_price"]) * p["contracts"]
+            for p in eco["futures"].get(uid, [])
+            if p["ticker"] in eco["market"]
+        )
+        options_val = sum(
+            max(0, (eco["market"][o["ticker"]]["price"] - o["strike"]) * o["contracts"])
+            if o["option_type"] == "call"
+            else max(0, (o["strike"] - eco["market"][o["ticker"]]["price"]) * o["contracts"])
+            for o in eco["options"].get(uid, [])
+            if not o.get("exercised") and o["ticker"] in eco["market"]
+        )
+        return round(cash + portfolio + futures_pnl + options_val, 2)
+
+    top = sorted(eco["balances"].keys(), key=net_worth, reverse=True)[:5]
+    medals = ["🥇", "🥈", "🥉", "4.", "5."]
     lines = []
-    for i, (uid, coins) in enumerate(top, 1):
+    for i, uid in enumerate(top):
         member = ctx.guild.get_member(int(uid))
         name = member.display_name if member else "Unknown"
-        lines.append(f"{i}. **{name}** — {coins} coins")
-    await ctx.send("💰 **Roast Coin Leaderboard**\n" + "\n".join(lines))
+        cash = eco["balances"].get(str(uid), 0)
+        total = net_worth(uid)
+        portfolio = round(total - cash, 2)
+        if portfolio:
+            lines.append(f"{medals[i]} **{name}** — {total:.0f} coins net worth _(cash: {cash} + investments: {portfolio:.0f})_")
+        else:
+            lines.append(f"{medals[i]} **{name}** — {total:.0f} coins")
+    await ctx.send("💰 **Roast Coin Leaderboard** _(ranked by net worth)_\n" + "\n".join(lines))
 
 
 @bot.command(name="shop")
