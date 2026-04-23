@@ -151,31 +151,47 @@ Deploy the project to any VPS (DigitalOcean, Linode, AWS EC2, etc.), follow the 
 
 ## Updating the Bot
 
-Since the bot is already running (e.g. via systemd or screen), the update process is:
+### Option A — Discord command (easiest)
 
-1. **Pull the latest code:**
-   ```bash
-   git pull origin main
-   ```
+If the bot is already running, type this in any Discord channel you have admin access to:
 
-2. **Install any new dependencies** (only needed if `requirements.txt` changed):
-   ```bash
-   pip install -r requirements.txt
-   ```
+```
+!update
+```
 
-3. **Restart the bot** so it picks up the changes:
+This will:
+1. Pull the latest code from the current branch
+2. Print the git output so you can see what changed
+3. Kill all running bot instances with `pkill -f bot.py`
+4. Your persistence setup (systemd, screen, etc.) will automatically restart it with the new code
 
-   - **systemd:**
-     ```bash
-     sudo systemctl restart donavanbot
-     ```
-   - **screen:** Kill the old session and start a new one:
-     ```bash
-     screen -r donavanbot
-     # Press Ctrl+C to stop the bot
-     python bot.py
-     # Press Ctrl+A then D to detach
-     ```
+> **Note:** If nothing changed, git will say `Already up to date.` and the bot will still restart cleanly.
+
+---
+
+### Option B — Manual (SSH into the server)
+
+```bash
+git pull origin claude/fix-buyitem-command-LzavR
+pkill -f bot.py
+source venv/bin/activate
+python bot.py
+```
+
+Install any new dependencies first if `requirements.txt` changed:
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+### Option C — systemd restart
+
+```bash
+git pull origin claude/fix-buyitem-command-LzavR
+sudo systemctl restart donavanbot
+```
 
 ---
 

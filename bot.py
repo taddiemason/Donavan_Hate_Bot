@@ -1,5 +1,6 @@
 import os
 import json
+import math
 import random
 import asyncio
 import tempfile
@@ -129,6 +130,71 @@ SHOP_ITEMS = {
         "name": "Nuclear",
         "cost": 500,
         "description": "Maximum Hatebot roast + forces TTS even if it's off",
+    },
+    "eulogy": {
+        "name": "Eulogy",
+        "cost": 150,
+        "description": "HateBot delivers a dramatic funeral eulogy for Donovan's dignity, as if it has already passed away",
+    },
+    "wanted_poster": {
+        "name": "Wanted Poster",
+        "cost": 175,
+        "description": "HateBot generates a fake FBI wanted poster describing Donovan's crimes against the server",
+    },
+    "therapy_session": {
+        "name": "Therapy Session",
+        "cost": 200,
+        "description": "HateBot roleplays as Donovan's therapist and reads his 'case notes' aloud in the channel",
+    },
+    "cease_and_desist": {
+        "name": "Cease & Desist",
+        "cost": 225,
+        "description": "HateBot drafts a formal legal letter demanding Donovan stop being himself immediately",
+    },
+    "linkedin_post": {
+        "name": "LinkedIn Post",
+        "cost": 250,
+        "description": "HateBot writes a cringe corporate LinkedIn post from Donovan's perspective hyping up his latest L as a 'growth opportunity'",
+    },
+    "documentary": {
+        "name": "Documentary",
+        "cost": 325,
+        "description": "HateBot generates a Ken Burns-style documentary narration about a recent Donovan moment, complete with dramatic pauses",
+    },
+    "legacy_mode": {
+        "name": "Legacy Mode",
+        "cost": 450,
+        "description": "HateBot compiles Donovan's greatest hits — his worst moments from server history — into one devastating highlight reel recap",
+    },
+    "motivational_poster": {
+        "name": "Motivational Poster",
+        "cost": 200,
+        "description": "HateBot generates a fake inspirational quote attributed to Donovan paired with the most embarrassing context possible",
+    },
+    "autopsy_report": {
+        "name": "Autopsy Report",
+        "cost": 225,
+        "description": "HateBot produces a clinical medical examiner's report on the cause of death of Donovan's credibility",
+    },
+    "wikipedia_page": {
+        "name": "Wikipedia Page",
+        "cost": 325,
+        "description": "HateBot generates a fake Wikipedia article about Donovan complete with a controversies section",
+    },
+    "parole_hearing": {
+        "name": "Parole Hearing",
+        "cost": 350,
+        "description": "HateBot conducts a formal parole board hearing to determine whether Donovan has earned the right to be taken seriously again — verdict always denied",
+    },
+    "dossier": {
+        "name": "Dossier",
+        "cost": 400,
+        "description": "HateBot compiles and presents a full classified intelligence briefing on Donovan, his known associates, and his pattern of behavior",
+    },
+    "state_of_the_union": {
+        "name": "State of the Union",
+        "cost": 475,
+        "description": "HateBot delivers a presidential address formally assessing the ongoing Donovan situation, its impact on national morale, and the administration's response plan",
     },
 }
 
@@ -325,6 +391,15 @@ def load_count():
 DONOVAN_STOCK_BASE = 100.0
 USER_STOCK_BASE = 10.0
 
+MARKET_STOCKS = {
+    "DONOVAN": {"base_price": 100.0, "shares_outstanding": 10000, "shortable": True},
+    "RUST":    {"base_price": 42.0,  "shares_outstanding": 5000,  "shortable": True},
+    "BIGMAC":  {"base_price": 5.99,  "shares_outstanding": 5000,  "shortable": True},
+    "TORTA":   {"base_price": 12.50, "shares_outstanding": 5000,  "shortable": True},
+    "TRUMP":   {"base_price": 75.0,  "shares_outstanding": 5000,  "shortable": True},
+    "COCAINE": {"base_price": 420.0, "shares_outstanding": 2000,  "shortable": True},
+}
+
 
 def get_stocks():
     eco = load_economy()
@@ -358,9 +433,13 @@ def get_display_prices(stocks):
 
 
 def update_stocks_on_roast(user_id):
-    stocks = get_stocks()
+    eco = load_economy()
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
+    stocks = eco.get("stocks", {
+        "donovan": {"price": DONOVAN_STOCK_BASE, "prev_price": DONOVAN_STOCK_BASE, "last_updated": now},
+        "users": {},
+    })
     drop = round(random.uniform(1.5, 3.5), 2)
     stocks["donovan"]["prev_price"] = stocks["donovan"]["price"]
     stocks["donovan"]["price"] = max(round(stocks["donovan"]["price"] - drop, 2), 0.01)
@@ -373,8 +452,211 @@ def update_stocks_on_roast(user_id):
     stocks["users"][uid]["prev_price"] = stocks["users"][uid]["price"]
     stocks["users"][uid]["price"] = round(stocks["users"][uid]["price"] + gain, 2)
     stocks["users"][uid]["last_updated"] = now
+    eco["stocks"] = stocks
 
-    save_stocks(stocks)
+    # Mirror drop onto real market $DONOVAN
+    init_market(eco)
+    eco["market"]["DONOVAN"]["prev_price"] = eco["market"]["DONOVAN"]["price"]
+    eco["market"]["DONOVAN"]["price"] = max(round(eco["market"]["DONOVAN"]["price"] - drop, 2), 0.01)
+    eco["market"]["DONOVAN"]["last_updated"] = now
+
+    save_economy(eco)
+
+
+def init_market(eco):
+    if "market" not in eco:
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        eco["market"] = {
+            ticker: {
+                "price": info["base_price"],
+                "prev_price": info["base_price"],
+                "last_updated": now,
+                "volume_today": 0,
+            }
+            for ticker, info in MARKET_STOCKS.items()
+        }
+    eco.setdefault("portfolios", {})
+    eco.setdefault("short_positions", {})
+    eco.setdefault("limit_orders", [])
+    eco.setdefault("next_order_id", 1)
+
+
+def apply_price_impact(eco, ticker, shares, direction):
+    outstanding = MARKET_STOCKS[ticker]["shares_outstanding"]
+    impact_pct = (shares / outstanding) * 15.0 * direction
+    old = eco["market"][ticker]["price"]
+    eco["market"][ticker]["prev_price"] = old
+    eco["market"][ticker]["price"] = max(round(old * (1 + impact_pct / 100), 2), 0.01)
+    eco["market"][ticker]["volume_today"] = eco["market"][ticker].get("volume_today", 0) + shares
+    eco["market"][ticker]["last_updated"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def execute_market_buy(eco, uid, ticker, shares):
+    uid = str(uid)
+    price = eco["market"][ticker]["price"]
+    cost = round(price * shares, 2)
+    bal = eco["balances"].get(uid, 0)
+    if bal < cost:
+        return False, f"Not enough coins. Need **{cost:.0f}**, have **{bal}**."
+    eco["balances"][uid] = bal - cost
+    apply_price_impact(eco, ticker, shares, +1)
+    new_price = eco["market"][ticker]["price"]
+    port = eco["portfolios"].setdefault(uid, {})
+    if ticker in port:
+        total_shares = port[ticker]["shares"] + shares
+        total_cost = port[ticker]["avg_cost"] * port[ticker]["shares"] + cost
+        port[ticker]["shares"] = total_shares
+        port[ticker]["avg_cost"] = round(total_cost / total_shares, 2)
+    else:
+        port[ticker] = {"shares": shares, "avg_cost": price}
+    return True, f"Bought **{shares}** shares of **${ticker}** at **${price:.2f}** each. Cost: **{cost:.0f} coins**. New price: **${new_price:.2f}**"
+
+
+def execute_market_sell(eco, uid, ticker, shares):
+    uid = str(uid)
+    port = eco.get("portfolios", {}).get(uid, {})
+    held = port.get(ticker, {}).get("shares", 0)
+    if held < shares:
+        return False, f"You only own **{held}** shares of **${ticker}**."
+    price = eco["market"][ticker]["price"]
+    proceeds = round(price * shares, 2)
+    avg_cost = port[ticker]["avg_cost"]
+    pnl = round((price - avg_cost) * shares, 2)
+    apply_price_impact(eco, ticker, shares, -1)
+    new_price = eco["market"][ticker]["price"]
+    eco["balances"][uid] = eco["balances"].get(uid, 0) + proceeds
+    port[ticker]["shares"] -= shares
+    if port[ticker]["shares"] == 0:
+        del port[ticker]
+    pnl_str = f"+{pnl:.0f}" if pnl >= 0 else str(round(pnl))
+    return True, f"Sold **{shares}** shares of **${ticker}** at **${price:.2f}**. Proceeds: **{proceeds:.0f} coins** (P&L: **{pnl_str}**). New price: **${new_price:.2f}**"
+
+
+def execute_open_short(eco, uid, ticker, shares):
+    uid = str(uid)
+    if not MARKET_STOCKS[ticker]["shortable"]:
+        return False, f"**${ticker}** cannot be shorted."
+    price = eco["market"][ticker]["price"]
+    collateral = round(price * shares * 1.25, 2)
+    bal = eco["balances"].get(uid, 0)
+    if bal < collateral:
+        return False, f"Need **{collateral:.0f} coins** collateral (125% of position). You have **{bal}**."
+    eco["balances"][uid] = bal - collateral
+    apply_price_impact(eco, ticker, shares, -1)
+    new_price = eco["market"][ticker]["price"]
+    shorts = eco.setdefault("short_positions", {}).setdefault(uid, {})
+    if ticker in shorts:
+        total = shorts[ticker]["shares"] + shares
+        avg = (shorts[ticker]["avg_price"] * shorts[ticker]["shares"] + price * shares) / total
+        shorts[ticker]["shares"] = total
+        shorts[ticker]["avg_price"] = round(avg, 2)
+        shorts[ticker]["collateral"] = round(shorts[ticker]["collateral"] + collateral, 2)
+    else:
+        shorts[ticker] = {"shares": shares, "avg_price": price, "collateral": collateral}
+    return True, f"⬇️ Shorted **{shares}** shares of **${ticker}** at **${price:.2f}**. Collateral held: **{collateral:.0f} coins**. New price: **${new_price:.2f}**"
+
+
+def execute_close_short(eco, uid, ticker, shares):
+    uid = str(uid)
+    shorts = eco.get("short_positions", {}).get(uid, {})
+    held = shorts.get(ticker, {}).get("shares", 0)
+    if held < shares:
+        return False, f"You only have **{held}** shares shorted on **${ticker}**."
+    pos = shorts[ticker]
+    price = eco["market"][ticker]["price"]
+    frac = shares / pos["shares"]
+    collateral_back = round(pos["collateral"] * frac, 2)
+    pnl = round((pos["avg_price"] - price) * shares, 2)
+    returns = max(round(collateral_back + pnl, 2), 0)
+    apply_price_impact(eco, ticker, shares, +1)
+    new_price = eco["market"][ticker]["price"]
+    eco["balances"][uid] = eco["balances"].get(uid, 0) + returns
+    pos["shares"] -= shares
+    pos["collateral"] = round(pos["collateral"] - collateral_back, 2)
+    if pos["shares"] == 0:
+        del shorts[ticker]
+    pnl_str = f"+{pnl:.0f}" if pnl >= 0 else str(round(pnl))
+    return True, f"Covered **{shares}** shares of **${ticker}** at **${price:.2f}**. P&L: **{pnl_str} coins**. Returned: **{returns:.0f} coins**. New price: **${new_price:.2f}**"
+
+
+def get_portfolio_value(eco, uid):
+    uid = str(uid)
+    total = 0.0
+    for ticker, pos in eco.get("portfolios", {}).get(uid, {}).items():
+        if ticker in eco.get("market", {}):
+            total += pos["shares"] * eco["market"][ticker]["price"]
+    for ticker, pos in eco.get("short_positions", {}).get(uid, {}).items():
+        if ticker in eco.get("market", {}):
+            pnl = (pos["avg_price"] - eco["market"][ticker]["price"]) * pos["shares"]
+            total += pos["collateral"] + pnl
+    return round(total, 2)
+
+
+def init_derivatives(eco):
+    eco.setdefault("futures", {})
+    eco.setdefault("options", {})
+    eco.setdefault("next_derivative_id", 1)
+
+
+def calc_option_premium(spot, strike, option_type, days):
+    time_value = spot * 0.04 * math.sqrt(max(days, 0.5) / 7)
+    intrinsic = max(0, spot - strike) if option_type == "call" else max(0, strike - spot)
+    return round(max(intrinsic + time_value, spot * 0.01), 2)
+
+
+async def settle_expired_futures(eco, channel):
+    now = datetime.datetime.now(datetime.timezone.utc)
+    for uid, positions in list(eco.get("futures", {}).items()):
+        remaining = []
+        for pos in positions:
+            if now < datetime.datetime.fromisoformat(pos["expiry"]):
+                remaining.append(pos)
+                continue
+            price = eco["market"][pos["ticker"]]["price"]
+            pnl = (price - pos["entry_price"]) * pos["contracts"] if pos["direction"] == "long" \
+                else (pos["entry_price"] - price) * pos["contracts"]
+            pnl = round(pnl, 2)
+            returned = max(round(pos["margin"] + pnl, 2), 0)
+            eco["balances"][uid] = eco["balances"].get(uid, 0) + returned
+            pnl_str = f"+{pnl:.0f}" if pnl >= 0 else str(round(pnl))
+            if channel:
+                member = channel.guild.get_member(int(uid))
+                mention = member.mention if member else f"<@{uid}>"
+                await channel.send(
+                    f"📅 {mention} Futures **#{pos['id']}** settled: "
+                    f"**{pos['direction'].upper()} {pos['contracts']} ${pos['ticker']}** "
+                    f"${pos['entry_price']:.2f} → ${price:.2f} | P&L: **{pnl_str}** | Returned: **{returned:.0f} coins**"
+                )
+        eco["futures"][uid] = remaining
+
+
+async def expire_options(eco, channel):
+    now = datetime.datetime.now(datetime.timezone.utc)
+    for uid, opts in list(eco.get("options", {}).items()):
+        remaining = []
+        for opt in opts:
+            if opt.get("exercised"):
+                continue
+            if now < datetime.datetime.fromisoformat(opt["expiry"]):
+                remaining.append(opt)
+                continue
+            price = eco["market"][opt["ticker"]]["price"]
+            intrinsic = (price - opt["strike"]) * opt["contracts"] if opt["option_type"] == "call" \
+                else (opt["strike"] - price) * opt["contracts"]
+            if intrinsic > 0:
+                payout = round(intrinsic, 2)
+                eco["balances"][uid] = eco["balances"].get(uid, 0) + payout
+                result = f"auto-exercised ✅ payout: **{payout:.0f} coins**"
+            else:
+                result = "expired worthless 💀"
+            if channel:
+                member = channel.guild.get_member(int(uid))
+                mention = member.mention if member else f"<@{uid}>"
+                await channel.send(
+                    f"📅 {mention} Option **#{opt['id']}** "
+                    f"({opt['option_type'].upper()} ${opt['ticker']} strike ${opt['strike']:.2f}) {result}"
+                )
+        eco["options"][uid] = remaining
 
 
 def save_count(count):
@@ -389,7 +671,26 @@ def load_economy():
     return {"balances": {}, "bounties": [], "insurance_expires": None,
             "pending_upgrades": {}, "inventory": {}, "market_listings": [],
             "slow_clap_pending": 0,
-            "next_bounty_id": 1, "next_listing_id": 1}
+            "next_bounty_id": 1, "next_listing_id": 1,
+            "shop_rotation": None, "shop_rotation_expires": None}
+
+
+def get_shop_rotation():
+    eco = load_economy()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    expires_str = eco.get("shop_rotation_expires")
+    if expires_str:
+        expires = datetime.datetime.fromisoformat(expires_str)
+    else:
+        expires = None
+    if not expires or now >= expires:
+        rotation = random.sample(list(SHOP_ITEMS.keys()), 5)
+        next_expires = (now + datetime.timedelta(hours=24)).isoformat()
+        eco["shop_rotation"] = rotation
+        eco["shop_rotation_expires"] = next_expires
+        save_economy(eco)
+        return rotation, datetime.datetime.fromisoformat(next_expires)
+    return eco["shop_rotation"], expires
 
 
 def save_economy(data):
@@ -715,6 +1016,31 @@ async def weekly_recap():
         f"See you all next week for more Donovan disrespect."
     )
 
+    # Weekly portfolio recap
+    eco = load_economy()
+    init_market(eco)
+    all_uids = set(eco.get("portfolios", {}).keys()) | set(eco.get("short_positions", {}).keys())
+    if all_uids:
+        ranked = sorted(all_uids, key=lambda u: get_portfolio_value(eco, u), reverse=True)
+        lines = ["📈 **Weekly Portfolio Standings**\n"]
+        for i, uid in enumerate(ranked[:5], 1):
+            member = channel.guild.get_member(int(uid))
+            name = member.display_name if member else "Unknown"
+            val = get_portfolio_value(eco, uid)
+            medal = ["🥇", "🥈", "🥉", "4.", "5."][i - 1]
+            lines.append(f"{medal} **{name}** — {val:.0f} coins")
+        if len(ranked) > 1:
+            loser_uid = ranked[-1]
+            loser = channel.guild.get_member(int(loser_uid))
+            loser_name = loser.display_name if loser else "Unknown"
+            loser_val = get_portfolio_value(eco, loser_uid)
+            lines.append(f"\n💀 Biggest loser: **{loser_name}** — {loser_val:.0f} coins")
+        # Reset volume
+        for ticker in eco.get("market", {}):
+            eco["market"][ticker]["volume_today"] = 0
+        save_economy(eco)
+        await channel.send("\n".join(lines))
+
     # Weekly lottery drawing
     eco = load_economy()
     tickets = eco.get("lottery_tickets", {})
@@ -756,11 +1082,89 @@ async def scheduled_roast():
         await channel.send(random.choice(FRIDAY_ROASTS))
 
 
+@tasks.loop(minutes=1)
+async def limit_order_checker():
+    if not ROAST_CHANNEL_ID:
+        return
+    eco = load_economy()
+    init_market(eco)
+    orders = list(eco.get("limit_orders", []))
+    if not orders:
+        return
+    remaining = []
+    notifications = []
+    for order in orders:
+        ticker = order["ticker"]
+        if ticker not in eco.get("market", {}):
+            remaining.append(order)
+            continue
+        price = eco["market"][ticker]["price"]
+        should_fill = (
+            (order["order_type"] == "buy"   and price <= order["limit_price"]) or
+            (order["order_type"] == "sell"  and price >= order["limit_price"]) or
+            (order["order_type"] == "short" and price >= order["limit_price"]) or
+            (order["order_type"] == "cover" and price <= order["limit_price"])
+        )
+        if not should_fill:
+            remaining.append(order)
+            continue
+        uid = order["user_id"]
+        if order["order_type"] == "buy":
+            ok, msg = execute_market_buy(eco, uid, ticker, order["shares"])
+        elif order["order_type"] == "sell":
+            ok, msg = execute_market_sell(eco, uid, ticker, order["shares"])
+        elif order["order_type"] == "short":
+            ok, msg = execute_open_short(eco, uid, ticker, order["shares"])
+        else:
+            ok, msg = execute_close_short(eco, uid, ticker, order["shares"])
+        status = "filled ✅" if ok else "failed ❌"
+        notifications.append((uid, order["id"], status, msg))
+    eco["limit_orders"] = remaining
+    save_economy(eco)
+    channel = bot.get_channel(ROAST_CHANNEL_ID)
+    if channel:
+        for uid, order_id, status, msg in notifications:
+            member = channel.guild.get_member(int(uid))
+            mention = member.mention if member else f"<@{uid}>"
+            await channel.send(f"📋 {mention} Limit order **#{order_id}** {status}: {msg}")
+
+
+@tasks.loop(minutes=10)
+async def meme_stock_drift():
+    eco = load_economy()
+    init_market(eco)
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    for ticker in ("RUST", "BIGMAC", "TORTA", "TRUMP", "COCAINE"):
+        price = eco["market"][ticker]["price"]
+        change_pct = random.uniform(-4.0, 4.0)
+        new_price = max(round(price * (1 + change_pct / 100), 2), 0.01)
+        eco["market"][ticker]["prev_price"] = price
+        eco["market"][ticker]["price"] = new_price
+        eco["market"][ticker]["last_updated"] = now
+    save_economy(eco)
+
+
+@tasks.loop(minutes=5)
+async def derivatives_settlement():
+    if not ROAST_CHANNEL_ID:
+        return
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    channel = bot.get_channel(ROAST_CHANNEL_ID)
+    await settle_expired_futures(eco, channel)
+    await expire_options(eco, channel)
+    save_economy(eco)
+
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
     scheduled_roast.start()
     weekly_recap.start()
+    limit_order_checker.start()
+    derivatives_settlement.start()
+    meme_stock_drift.start()
     asyncio.ensure_future(tts_worker())
 
 
@@ -965,6 +1369,58 @@ async def on_message(message):
                         await message.channel.send("⛔ Donovan has been exiled for 60 seconds. Enjoy the peace.")
                     except Exception:
                         await message.channel.send("⛔ Exile failed — bot needs Moderate Members permission.")
+
+            if consume_upgrade(message.author.id, "eulogy"):
+                eulogy = await ask_openai("Write a short dramatic funeral eulogy (3-5 sentences) for Donovan's dignity, as if it has already passed away. Be theatrical, savage, and treat it as a genuine loss to no one.")
+                await message.channel.send(f"⚰️ **EULOGY FOR DONOVAN'S DIGNITY:**\n{eulogy}")
+
+            if consume_upgrade(message.author.id, "wanted_poster"):
+                poster = await ask_openai("Generate a fake FBI wanted poster description for Donovan. Include: name, aliases, known crimes against the server, last known location, reward amount, and a warning to approach with low expectations.")
+                await message.channel.send(f"🪧 **WANTED** 🪧\n{poster}")
+
+            if consume_upgrade(message.author.id, "therapy_session"):
+                therapy = await ask_openai("Roleplay as Donovan's therapist reading case notes aloud. Include diagnosis, presenting complaints, therapist observations, and prognosis. Make it clinical but devastatingly accurate.")
+                await message.channel.send(f"🛋️ **THERAPY SESSION — CASE NOTES:**\n{therapy}")
+
+            if consume_upgrade(message.author.id, "cease_and_desist"):
+                legal = await ask_openai("Draft a formal cease and desist letter demanding Donovan immediately stop being himself. Use legal language, cite specific offenses against the server, and threaten consequences. Keep it under 6 sentences.")
+                await message.channel.send(f"⚖️ **CEASE & DESIST:**\n{legal}")
+
+            if consume_upgrade(message.author.id, "linkedin_post"):
+                linkedin = await ask_openai("Write a cringe corporate LinkedIn post from Donovan's perspective. He is spinning his latest embarrassing L as a 'growth opportunity' and 'learning experience'. Include hashtags. Make it painfully on-brand for LinkedIn.")
+                await message.channel.send(f"💼 **DONOVAN'S LINKEDIN POST:**\n{linkedin}")
+
+            if consume_upgrade(message.author.id, "documentary"):
+                doc = await ask_openai("Write a Ken Burns-style documentary narration (4-6 sentences) about a recent Donovan moment. Use a slow, grave, reflective tone. Include dramatic pauses indicated by '...' and treat the subject as historically significant.")
+                await message.channel.send(f"🎬 **DOCUMENTARY NARRATION:**\n{doc}")
+
+            if consume_upgrade(message.author.id, "legacy_mode"):
+                legacy = await ask_openai("Compile a devastating highlight reel recap of Donovan's greatest hits — his worst moments, biggest Ls, and most embarrassing behavior. Present it as a formal legacy retrospective. 5-7 sentences.")
+                await message.channel.send(f"🏆 **DONOVAN'S LEGACY — HIGHLIGHT REEL:**\n{legacy}")
+
+            if consume_upgrade(message.author.id, "motivational_poster"):
+                poster = await ask_openai("Generate a fake motivational poster. Include a short inspirational quote falsely attributed to Donovan, followed by the most embarrassing context that makes the quote hilarious. Format it like a real motivational poster caption.")
+                await message.channel.send(f"🖼️ **MOTIVATIONAL POSTER:**\n{poster}")
+
+            if consume_upgrade(message.author.id, "autopsy_report"):
+                autopsy = await ask_openai("Write a clinical medical examiner's autopsy report on the cause of death of Donovan's credibility. Include time of death, cause of death, contributing factors, and examiner's notes. Keep it formal and devastating.")
+                await message.channel.send(f"🔬 **AUTOPSY REPORT — DONOVAN'S CREDIBILITY:**\n{autopsy}")
+
+            if consume_upgrade(message.author.id, "wikipedia_page"):
+                wiki = await ask_openai("Write a fake Wikipedia-style article about Donovan. Include sections for Early Life, Known For, Controversies, and Legacy. Use encyclopedic tone. The controversies section should be the longest.")
+                await message.channel.send(f"📖 **WIKIPEDIA: DONOVAN**\n{wiki}")
+
+            if consume_upgrade(message.author.id, "parole_hearing"):
+                parole = await ask_openai("Conduct a formal parole board hearing transcript for Donovan, who is seeking the right to be taken seriously again. Include board questions, his responses, deliberation, and the final verdict — which is always denied. 5-7 sentences.")
+                await message.channel.send(f"🔨 **PAROLE HEARING — VERDICT: DENIED:**\n{parole}")
+
+            if consume_upgrade(message.author.id, "dossier"):
+                dossier = await ask_openai("Present a full classified intelligence dossier on Donovan. Include: codename, threat level, known associates, behavioral patterns, noted weaknesses, and current status. Use spy/intelligence report formatting.")
+                await message.channel.send(f"🗂️ **CLASSIFIED DOSSIER: DONOVAN**\n{dossier}")
+
+            if consume_upgrade(message.author.id, "state_of_the_union"):
+                sotu = await ask_openai("Deliver a presidential State of the Union address formally assessing the ongoing Donovan situation. Address the nation, assess the threat to morale, outline the administration's response plan, and close with hollow optimism. 5-7 sentences.")
+                await message.channel.send(f"🎙️ **STATE OF THE UNION — THE DONOVAN SITUATION:**\n{sotu}")
 
             coin_reward = 20 if is_double_coin_day() else 10
             if is_double_coin_day():
@@ -1440,34 +1896,33 @@ async def lottery(ctx, amount: int = None):
 
 @bot.command(name="stockmarket")
 async def stock_market(ctx):
-    stocks = get_stocks()
-    don_price, user_prices = get_display_prices(stocks)
+    eco = load_economy()
+    init_market(eco)
 
-    don_prev = stocks["donovan"].get("prev_price", DONOVAN_STOCK_BASE)
-    don_change = round(don_price - don_prev, 2)
-    don_pct = round((don_change / don_prev * 100) if don_prev else 0, 1)
-    don_trend = "📉" if don_change < 0 else "📈"
+    lines = ["📊 **DONOVAN STOCK EXCHANGE**\n"]
 
-    lines = [
-        "📊 **DONOVAN STOCK EXCHANGE**\n",
-        f"**$DONOVAN** — ${don_price:.2f}   {don_trend} {don_change:+.2f} ({don_pct:+.1f}%)",
-        f"_The lower it goes the better for all of us._\n",
-    ]
+    for ticker, info in MARKET_STOCKS.items():
+        mdata = eco["market"][ticker]
+        price = mdata["price"]
+        prev = mdata.get("prev_price", info["base_price"])
+        change = round(price - prev, 2)
+        pct = round((change / prev * 100) if prev else 0, 1)
+        trend = "📉" if change < 0 else "📈"
+        vol = mdata.get("volume_today", 0)
+        lines.append(f"**${ticker}** — ${price:.2f}  {trend} {change:+.2f} ({pct:+.1f}%)  Vol: {vol}")
 
-    if user_prices:
-        top = sorted(user_prices.items(), key=lambda x: x[1], reverse=True)[:5]
-        lines.append("**Top Roasters:**")
-        for uid, price in top:
+    # Top portfolio holders
+    all_uids = set(eco.get("portfolios", {}).keys()) | set(eco.get("short_positions", {}).keys())
+    if all_uids:
+        ranked = sorted(all_uids, key=lambda u: get_portfolio_value(eco, u), reverse=True)[:5]
+        lines.append("\n**Top Portfolio Values:**")
+        for uid in ranked:
             member = ctx.guild.get_member(int(uid))
-            name = (member.display_name if member else "Unknown").upper()[:10]
-            prev = stocks["users"].get(uid, {}).get("prev_price", USER_STOCK_BASE)
-            change = round(price - prev, 2)
-            pct = round((change / prev * 100) if prev else 0, 1)
-            trend = "📈" if change >= 0 else "📉"
-            lines.append(f"**${name}** — ${price:.2f}   {trend} {change:+.2f} ({pct:+.1f}%)")
-    else:
-        lines.append("_No roasters on the board yet. Start roasting to get listed._")
+            name = member.display_name if member else "Unknown"
+            val = get_portfolio_value(eco, uid)
+            lines.append(f"  **{name}** — {val:.0f} coins")
 
+    lines.append("\n`!buystock` `!sellstock` `!short` `!cover` `!limitorder` `!portfolio` `!orders`")
     await ctx.send("\n".join(lines))
 
 
@@ -1515,8 +1970,45 @@ async def commands_list(ctx):
 @bot.command(name="balance")
 async def balance(ctx, member: discord.Member = None):
     target = member or ctx.author
-    bal = load_economy()["balances"].get(str(target.id), 0)
-    await ctx.send(f"💰 **{target.display_name}** has **{bal} Roast Coins**.")
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    uid = str(target.id)
+    bal = eco["balances"].get(uid, 0)
+    portfolio = get_portfolio_value(eco, uid)
+
+    # Unrealized futures P&L
+    futures_pnl = 0.0
+    for pos in eco["futures"].get(uid, []):
+        price = eco["market"][pos["ticker"]]["price"]
+        if pos["direction"] == "long":
+            futures_pnl += (price - pos["entry_price"]) * pos["contracts"]
+        else:
+            futures_pnl += (pos["entry_price"] - price) * pos["contracts"]
+
+    # Unrealized options value
+    options_value = 0.0
+    for opt in eco["options"].get(uid, []):
+        if opt.get("exercised"):
+            continue
+        price = eco["market"][opt["ticker"]]["price"]
+        if opt["option_type"] == "call":
+            options_value += max(0, (price - opt["strike"]) * opt["contracts"])
+        else:
+            options_value += max(0, (opt["strike"] - price) * opt["contracts"])
+
+    total = round(bal + portfolio + futures_pnl + options_value, 2)
+    lines = [f"💰 **{target.display_name}**",
+             f"Cash: **{bal} coins**"]
+    if portfolio:
+        lines.append(f"Stocks/Shorts: **{portfolio:.0f} coins**")
+    if futures_pnl:
+        pnl_str = f"+{futures_pnl:.0f}" if futures_pnl >= 0 else f"{futures_pnl:.0f}"
+        lines.append(f"Futures P&L: **{pnl_str} coins**")
+    if options_value:
+        lines.append(f"Options Value: **{options_value:.0f} coins**")
+    lines.append(f"**Net Worth: {total:.0f} coins**")
+    await ctx.send("\n".join(lines))
 
 
 @bot.command(name="leaderboard")
@@ -1536,15 +2028,28 @@ async def leaderboard(ctx):
 
 @bot.command(name="shop")
 async def shop(ctx):
-    lines = [f"**{v['name']}** (`{k}`) — {v['cost']} coins\n_{v['description']}_"
-             for k, v in SHOP_ITEMS.items()]
-    await ctx.send("🛒 **Roast Shop**\n\n" + "\n\n".join(lines) + "\n\nUse `!buy <item>` to purchase.")
+    rotation, expires = get_shop_rotation()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    seconds_left = int((expires - now).total_seconds())
+    hours_left = seconds_left // 3600
+    minutes_left = (seconds_left % 3600) // 60
+    lines = [f"**{SHOP_ITEMS[k]['name']}** (`{k}`) — {SHOP_ITEMS[k]['cost']} coins\n_{SHOP_ITEMS[k]['description']}_"
+             for k in rotation if k in SHOP_ITEMS]
+    await ctx.send(
+        f"🛒 **Roast Shop** — Today's Rotation _(refreshes in {hours_left}h {minutes_left}m)_\n\n"
+        + "\n\n".join(lines)
+        + "\n\nUse `!buy <item>` to purchase."
+    )
 
 
 @bot.command(name="buy")
 async def buy_item(ctx, item_name: str = None):
     if not item_name or item_name.lower() not in SHOP_ITEMS:
-        await ctx.send(f"Unknown item. Use `!shop` to see available items.")
+        await ctx.send(f"Unknown item. Use `!shop` to see today's available items.")
+        return
+    rotation, _ = get_shop_rotation()
+    if item_name.lower() not in rotation:
+        await ctx.send(f"**{SHOP_ITEMS[item_name.lower()]['name']}** isn't in today's rotation. Check `!shop` for what's available.")
         return
     item = SHOP_ITEMS[item_name.lower()]
     if not spend_coins(ctx.author.id, item["cost"]):
@@ -1887,6 +2392,418 @@ async def toggle_tts(ctx, state: str = None):
 
     tts_enabled = state.lower() == "on"
     await ctx.send(f"TTS roasts turned **{state.lower()}**.")
+
+
+@bot.command(name="update")
+@commands.has_permissions(administrator=True)
+async def update_bot(ctx):
+    import subprocess
+    await ctx.send("⬇️ Pulling latest changes...")
+    result = subprocess.run(["git", "pull"], capture_output=True, text=True)
+    output = result.stdout.strip() or result.stderr.strip() or "No output."
+    await ctx.send(f"```{output}```")
+    if result.returncode != 0:
+        await ctx.send("❌ Git pull failed. Not restarting.")
+        return
+    await ctx.send("✅ Update complete. Restarting...")
+    subprocess.run(["pkill", "-f", "bot.py"])
+
+
+@bot.command(name="buystock")
+async def buy_stock(ctx, ticker: str = None, shares: int = None):
+    if not ticker or not shares or shares <= 0:
+        await ctx.send("Usage: `!buystock <TICKER> <shares>` — e.g. `!buystock DONOVAN 10`")
+        return
+    ticker = ticker.upper()
+    if ticker not in MARKET_STOCKS:
+        await ctx.send(f"Unknown ticker. Available: {', '.join(f'${t}' for t in MARKET_STOCKS)}")
+        return
+    eco = load_economy()
+    init_market(eco)
+    ok, msg = execute_market_buy(eco, ctx.author.id, ticker, shares)
+    save_economy(eco)
+    await ctx.send(("✅ " if ok else "❌ ") + msg)
+
+
+@bot.command(name="sellstock")
+async def sell_stock(ctx, ticker: str = None, shares: int = None):
+    if not ticker or not shares or shares <= 0:
+        await ctx.send("Usage: `!sellstock <TICKER> <shares>` — e.g. `!sellstock DONOVAN 10`")
+        return
+    ticker = ticker.upper()
+    if ticker not in MARKET_STOCKS:
+        await ctx.send(f"Unknown ticker. Available: {', '.join(f'${t}' for t in MARKET_STOCKS)}")
+        return
+    eco = load_economy()
+    init_market(eco)
+    ok, msg = execute_market_sell(eco, ctx.author.id, ticker, shares)
+    save_economy(eco)
+    await ctx.send(("✅ " if ok else "❌ ") + msg)
+
+
+@bot.command(name="short")
+async def short_stock(ctx, ticker: str = None, shares: int = None):
+    if not ticker or not shares or shares <= 0:
+        await ctx.send("Usage: `!short <TICKER> <shares>` — Only `$DONOVAN` is shortable.")
+        return
+    ticker = ticker.upper()
+    if ticker not in MARKET_STOCKS:
+        await ctx.send(f"Unknown ticker. Available: {', '.join(f'${t}' for t in MARKET_STOCKS)}")
+        return
+    eco = load_economy()
+    init_market(eco)
+    ok, msg = execute_open_short(eco, ctx.author.id, ticker, shares)
+    save_economy(eco)
+    await ctx.send(("✅ " if ok else "❌ ") + msg)
+
+
+@bot.command(name="cover")
+async def cover_short(ctx, ticker: str = None, shares: int = None):
+    if not ticker or not shares or shares <= 0:
+        await ctx.send("Usage: `!cover <TICKER> <shares>` — e.g. `!cover DONOVAN 10`")
+        return
+    ticker = ticker.upper()
+    if ticker not in MARKET_STOCKS:
+        await ctx.send(f"Unknown ticker. Available: {', '.join(f'${t}' for t in MARKET_STOCKS)}")
+        return
+    eco = load_economy()
+    init_market(eco)
+    ok, msg = execute_close_short(eco, ctx.author.id, ticker, shares)
+    save_economy(eco)
+    await ctx.send(("✅ " if ok else "❌ ") + msg)
+
+
+@bot.command(name="limitorder")
+async def limit_order(ctx, order_type: str = None, ticker: str = None, shares: int = None, price: float = None):
+    if not all([order_type, ticker, shares, price]) or shares <= 0 or price <= 0:
+        await ctx.send(
+            "Usage: `!limitorder <buy|sell|short|cover> <TICKER> <shares> <price>`\n"
+            "Example: `!limitorder buy DONOVAN 10 85.00`"
+        )
+        return
+    order_type = order_type.lower()
+    ticker = ticker.upper()
+    if order_type not in ("buy", "sell", "short", "cover"):
+        await ctx.send("Order type must be `buy`, `sell`, `short`, or `cover`.")
+        return
+    if ticker not in MARKET_STOCKS:
+        await ctx.send(f"Unknown ticker. Available: {', '.join(f'${t}' for t in MARKET_STOCKS)}")
+        return
+    eco = load_economy()
+    init_market(eco)
+    order_id = eco.get("next_order_id", 1)
+    eco["next_order_id"] = order_id + 1
+    eco.setdefault("limit_orders", []).append({
+        "id": order_id,
+        "user_id": str(ctx.author.id),
+        "ticker": ticker,
+        "order_type": order_type,
+        "shares": shares,
+        "limit_price": price,
+        "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    })
+    save_economy(eco)
+    current = eco["market"][ticker]["price"]
+    await ctx.send(
+        f"📋 Limit order **#{order_id}** placed: **{order_type.upper()} {shares} ${ticker}** "
+        f"@ **${price:.2f}** (current: **${current:.2f}**). You'll be notified when it fills."
+    )
+
+
+@bot.command(name="cancellimit")
+async def cancel_limit(ctx, order_id: int = None):
+    if not order_id:
+        await ctx.send("Usage: `!cancellimit <order_id>`")
+        return
+    eco = load_economy()
+    orders = eco.get("limit_orders", [])
+    target = next((o for o in orders if o["id"] == order_id and o["user_id"] == str(ctx.author.id)), None)
+    if not target:
+        await ctx.send(f"Order **#{order_id}** not found or doesn't belong to you.")
+        return
+    eco["limit_orders"] = [o for o in orders if o["id"] != order_id]
+    save_economy(eco)
+    await ctx.send(f"✅ Limit order **#{order_id}** cancelled.")
+
+
+@bot.command(name="portfolio")
+async def portfolio_cmd(ctx, member: discord.Member = None):
+    target = member or ctx.author
+    eco = load_economy()
+    init_market(eco)
+    uid = str(target.id)
+    holdings = eco.get("portfolios", {}).get(uid, {})
+    shorts = eco.get("short_positions", {}).get(uid, {})
+    if not holdings and not shorts:
+        await ctx.send(f"**{target.display_name}** has no open positions. Use `!buystock` or `!short` to get in.")
+        return
+    lines = [f"📈 **{target.display_name}'s Portfolio**\n"]
+    total_value = 0.0
+    if holdings:
+        lines.append("**Long Positions:**")
+        for ticker, pos in holdings.items():
+            price = eco["market"][ticker]["price"]
+            value = round(pos["shares"] * price, 2)
+            pnl = round((price - pos["avg_cost"]) * pos["shares"], 2)
+            pnl_str = f"+{pnl:.0f}" if pnl >= 0 else str(round(pnl))
+            total_value += value
+            lines.append(
+                f"  **${ticker}** — {pos['shares']} shares @ avg ${pos['avg_cost']:.2f} | "
+                f"Now: ${price:.2f} | Value: {value:.0f} | P&L: **{pnl_str}**"
+            )
+    if shorts:
+        lines.append("\n**Short Positions:**")
+        for ticker, pos in shorts.items():
+            price = eco["market"][ticker]["price"]
+            pnl = round((pos["avg_price"] - price) * pos["shares"], 2)
+            pnl_str = f"+{pnl:.0f}" if pnl >= 0 else str(round(pnl))
+            total_value += pos["collateral"] + pnl
+            lines.append(
+                f"  **${ticker}** — {pos['shares']} shares short @ ${pos['avg_price']:.2f} | "
+                f"Now: ${price:.2f} | Collateral: {pos['collateral']:.0f} | P&L: **{pnl_str}**"
+            )
+    lines.append(f"\n**Total Portfolio Value: {total_value:.0f} coins**")
+    await ctx.send("\n".join(lines))
+
+
+@bot.command(name="orders")
+async def my_orders(ctx):
+    eco = load_economy()
+    uid = str(ctx.author.id)
+    orders = [o for o in eco.get("limit_orders", []) if o["user_id"] == uid]
+    if not orders:
+        await ctx.send("You have no pending limit orders. Use `!limitorder` to place one.")
+        return
+    lines = ["📋 **Your Pending Limit Orders:**\n"]
+    for o in orders:
+        lines.append(
+            f"**#{o['id']}** — {o['order_type'].upper()} {o['shares']} **${o['ticker']}** @ **${o['limit_price']:.2f}**"
+        )
+    lines.append("\nUse `!cancellimit <id>` to cancel.")
+    await ctx.send("\n".join(lines))
+
+
+@bot.command(name="futures")
+async def futures_cmd(ctx, direction: str = None, ticker: str = None, contracts: int = None):
+    if not all([direction, ticker, contracts]) or contracts <= 0:
+        await ctx.send(
+            "Usage: `!futures <long|short> <TICKER> <contracts>` — 7-day contract, 20% margin.\n"
+            "Example: `!futures long DONOVAN 10`"
+        )
+        return
+    direction = direction.lower()
+    ticker = ticker.upper()
+    if direction not in ("long", "short"):
+        await ctx.send("Direction must be `long` or `short`.")
+        return
+    if ticker not in MARKET_STOCKS:
+        await ctx.send(f"Unknown ticker. Available: {', '.join(f'${t}' for t in MARKET_STOCKS)}")
+        return
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    price = eco["market"][ticker]["price"]
+    margin = round(price * contracts * 0.20, 2)
+    uid = str(ctx.author.id)
+    bal = eco["balances"].get(uid, 0)
+    if bal < margin:
+        await ctx.send(f"Need **{margin:.0f} coins** margin (20% of position). You have **{bal}**.")
+        return
+    eco["balances"][uid] = bal - margin
+    deriv_id = eco["next_derivative_id"]
+    eco["next_derivative_id"] += 1
+    expiry = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)).isoformat()
+    eco["futures"].setdefault(uid, []).append({
+        "id": deriv_id,
+        "ticker": ticker,
+        "contracts": contracts,
+        "direction": direction,
+        "entry_price": price,
+        "margin": margin,
+        "expiry": expiry,
+    })
+    save_economy(eco)
+    emoji = "📈" if direction == "long" else "📉"
+    await ctx.send(
+        f"{emoji} Opened **{direction.upper()}** futures: **{contracts}x ${ticker}** @ **${price:.2f}**. "
+        f"Margin held: **{margin:.0f} coins**. Settles in 7 days. ID: **#{deriv_id}**"
+    )
+
+
+@bot.command(name="closefutures")
+async def close_futures_cmd(ctx, deriv_id: int = None):
+    if not deriv_id:
+        await ctx.send("Usage: `!closefutures <id>`")
+        return
+    uid = str(ctx.author.id)
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    positions = eco["futures"].get(uid, [])
+    pos = next((p for p in positions if p["id"] == deriv_id), None)
+    if not pos:
+        await ctx.send(f"Futures contract **#{deriv_id}** not found.")
+        return
+    price = eco["market"][pos["ticker"]]["price"]
+    pnl = (price - pos["entry_price"]) * pos["contracts"] if pos["direction"] == "long" \
+        else (pos["entry_price"] - price) * pos["contracts"]
+    pnl = round(pnl, 2)
+    returned = max(round(pos["margin"] + pnl, 2), 0)
+    eco["balances"][uid] = eco["balances"].get(uid, 0) + returned
+    eco["futures"][uid] = [p for p in positions if p["id"] != deriv_id]
+    save_economy(eco)
+    pnl_str = f"+{pnl:.0f}" if pnl >= 0 else str(round(pnl))
+    await ctx.send(
+        f"✅ Closed futures **#{deriv_id}**: **{pos['direction'].upper()} {pos['contracts']}x ${pos['ticker']}**. "
+        f"P&L: **{pnl_str} coins**. Returned: **{returned:.0f} coins**."
+    )
+
+
+@bot.command(name="myfutures")
+async def my_futures_cmd(ctx):
+    uid = str(ctx.author.id)
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    positions = eco["futures"].get(uid, [])
+    if not positions:
+        await ctx.send("No open futures. Use `!futures long/short <TICKER> <contracts>` to open one.")
+        return
+    now = datetime.datetime.now(datetime.timezone.utc)
+    lines = ["📅 **Your Open Futures:**\n"]
+    for pos in positions:
+        price = eco["market"][pos["ticker"]]["price"]
+        pnl = (price - pos["entry_price"]) * pos["contracts"] if pos["direction"] == "long" \
+            else (pos["entry_price"] - price) * pos["contracts"]
+        pnl = round(pnl, 2)
+        pnl_str = f"+{pnl:.0f}" if pnl >= 0 else str(round(pnl))
+        days_left = max(0, (datetime.datetime.fromisoformat(pos["expiry"]) - now).days)
+        lines.append(
+            f"**#{pos['id']}** {pos['direction'].upper()} **{pos['contracts']}x ${pos['ticker']}** "
+            f"@ ${pos['entry_price']:.2f} | Now: ${price:.2f} | P&L: **{pnl_str}** | {days_left}d left"
+        )
+    lines.append("\nUse `!closefutures <id>` to close early.")
+    await ctx.send("\n".join(lines))
+
+
+@bot.command(name="buyoption")
+async def buy_option_cmd(ctx, option_type: str = None, ticker: str = None, contracts: int = None, strike: float = None, days: int = 7):
+    if not all([option_type, ticker, contracts, strike]) or contracts <= 0 or strike <= 0:
+        await ctx.send(
+            "Usage: `!buyoption <call|put> <TICKER> <contracts> <strike> [days=7]`\n"
+            "Example: `!buyoption call DONOVAN 10 85 7`"
+        )
+        return
+    option_type = option_type.lower()
+    ticker = ticker.upper()
+    if option_type not in ("call", "put"):
+        await ctx.send("Option type must be `call` or `put`.")
+        return
+    if ticker not in MARKET_STOCKS:
+        await ctx.send(f"Unknown ticker. Available: {', '.join(f'${t}' for t in MARKET_STOCKS)}")
+        return
+    if not 1 <= days <= 30:
+        await ctx.send("Expiry must be between 1 and 30 days.")
+        return
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    spot = eco["market"][ticker]["price"]
+    premium_per = calc_option_premium(spot, strike, option_type, days)
+    total_premium = round(premium_per * contracts, 2)
+    uid = str(ctx.author.id)
+    bal = eco["balances"].get(uid, 0)
+    if bal < total_premium:
+        await ctx.send(
+            f"Premium costs **{total_premium:.0f} coins** (${premium_per:.2f}/contract). You have **{bal}**."
+        )
+        return
+    eco["balances"][uid] = bal - total_premium
+    deriv_id = eco["next_derivative_id"]
+    eco["next_derivative_id"] += 1
+    expiry = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=days)).isoformat()
+    eco["options"].setdefault(uid, []).append({
+        "id": deriv_id,
+        "ticker": ticker,
+        "option_type": option_type,
+        "contracts": contracts,
+        "strike": strike,
+        "premium_paid": total_premium,
+        "expiry": expiry,
+        "exercised": False,
+    })
+    save_economy(eco)
+    itm = "ITM" if (option_type == "call" and spot > strike) or (option_type == "put" and spot < strike) else "OTM"
+    await ctx.send(
+        f"✅ Bought **{contracts}x {option_type.upper()} ${ticker}** strike **${strike:.2f}** ({itm}, spot: ${spot:.2f}). "
+        f"Premium: **{total_premium:.0f} coins**. Expires in {days}d. ID: **#{deriv_id}**"
+    )
+
+
+@bot.command(name="exercise")
+async def exercise_option_cmd(ctx, deriv_id: int = None):
+    if not deriv_id:
+        await ctx.send("Usage: `!exercise <id>`")
+        return
+    uid = str(ctx.author.id)
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    opt = next((o for o in eco["options"].get(uid, []) if o["id"] == deriv_id and not o.get("exercised")), None)
+    if not opt:
+        await ctx.send(f"Option **#{deriv_id}** not found or already exercised.")
+        return
+    if datetime.datetime.now(datetime.timezone.utc) > datetime.datetime.fromisoformat(opt["expiry"]):
+        await ctx.send(f"Option **#{deriv_id}** has already expired.")
+        return
+    price = eco["market"][opt["ticker"]]["price"]
+    intrinsic = (price - opt["strike"]) * opt["contracts"] if opt["option_type"] == "call" \
+        else (opt["strike"] - price) * opt["contracts"]
+    if intrinsic <= 0:
+        await ctx.send(
+            f"Option **#{deriv_id}** is out of the money. "
+            f"Spot: ${price:.2f}, Strike: ${opt['strike']:.2f} — nothing to exercise."
+        )
+        return
+    payout = round(intrinsic, 2)
+    eco["balances"][uid] = eco["balances"].get(uid, 0) + payout
+    opt["exercised"] = True
+    save_economy(eco)
+    net_pnl = round(payout - opt["premium_paid"], 2)
+    net_str = f"+{net_pnl:.0f}" if net_pnl >= 0 else str(round(net_pnl))
+    await ctx.send(
+        f"✅ Exercised **#{deriv_id}** ({opt['option_type'].upper()} ${opt['ticker']} @ ${opt['strike']:.2f}). "
+        f"Payout: **{payout:.0f} coins**. Net P&L: **{net_str} coins**."
+    )
+
+
+@bot.command(name="myoptions")
+async def my_options_cmd(ctx):
+    uid = str(ctx.author.id)
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    opts = [o for o in eco["options"].get(uid, []) if not o.get("exercised")]
+    if not opts:
+        await ctx.send("No open options. Use `!buyoption call/put <TICKER> <contracts> <strike>` to buy one.")
+        return
+    now = datetime.datetime.now(datetime.timezone.utc)
+    lines = ["🎯 **Your Open Options:**\n"]
+    for opt in opts:
+        spot = eco["market"][opt["ticker"]]["price"]
+        intrinsic = max(0, (spot - opt["strike"]) * opt["contracts"]) if opt["option_type"] == "call" \
+            else max(0, (opt["strike"] - spot) * opt["contracts"])
+        itm = (opt["option_type"] == "call" and spot > opt["strike"]) or \
+              (opt["option_type"] == "put" and spot < opt["strike"])
+        days_left = max(0, (datetime.datetime.fromisoformat(opt["expiry"]) - now).days)
+        status = "✅ ITM" if itm else "❌ OTM"
+        lines.append(
+            f"**#{opt['id']}** {opt['option_type'].upper()} **{opt['contracts']}x ${opt['ticker']}** "
+            f"strike ${opt['strike']:.2f} | Spot: ${spot:.2f} {status} | "
+            f"Value: {intrinsic:.0f} | Paid: {opt['premium_paid']:.0f} | {days_left}d left"
+        )
+    lines.append("\nUse `!exercise <id>` to exercise early.")
+    await ctx.send("\n".join(lines))
 
 
 bot.run(os.getenv("DISCORD_TOKEN"))
