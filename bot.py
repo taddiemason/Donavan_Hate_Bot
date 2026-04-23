@@ -1676,12 +1676,31 @@ async def trivia(ctx):
             f"_{question}_\n\nYou have 30 seconds!"
         )
         def check(m):
-            return m.channel == ctx.channel and not m.author.bot and answer.lower() in m.content.lower()
-        try:
-            msg = await bot.wait_for("message", check=check, timeout=30)
-            add_coins(msg.author.id, 50)
-            await ctx.send(f"✅ {msg.author.mention} got it! The answer was **{answer.title()}**. **+50 coins!**")
-        except asyncio.TimeoutError:
+            return m.channel == ctx.channel and not m.author.bot and not m.content.startswith("!") and len(m.content.strip()) > 1
+
+        winner = None
+        deadline = asyncio.get_running_loop().time() + 30
+        while True:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                break
+            try:
+                msg = await bot.wait_for("message", check=check, timeout=remaining)
+                user_answer = msg.content.strip()
+                if len(user_answer.split()) > 5:
+                    correct = answer.lower() in user_answer.lower()
+                else:
+                    correct = await judge_sports_answer(question, answer, user_answer)
+                if correct:
+                    winner = msg
+                    break
+            except asyncio.TimeoutError:
+                break
+
+        if winner:
+            add_coins(winner.author.id, 50)
+            await ctx.send(f"✅ {winner.author.mention} got it! The answer was **{answer.title()}**. **+50 coins!**")
+        else:
             await ctx.send(f"⏱️ Time's up! The answer was **{answer.title()}**.")
     finally:
         trivia_active = False
