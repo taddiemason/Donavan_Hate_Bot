@@ -392,8 +392,8 @@ USER_STOCK_BASE = 10.0
 
 MARKET_STOCKS = {
     "DONOVAN": {"base_price": 100.0, "shares_outstanding": 10000, "shortable": True},
-    "RUST":    {"base_price": 42.0,  "shares_outstanding": 5000,  "shortable": False},
-    "BIGMAC":  {"base_price": 5.99,  "shares_outstanding": 5000,  "shortable": False},
+    "RUST":    {"base_price": 42.0,  "shares_outstanding": 5000,  "shortable": True},
+    "BIGMAC":  {"base_price": 5.99,  "shares_outstanding": 5000,  "shortable": True},
 }
 
 
@@ -531,7 +531,7 @@ def execute_market_sell(eco, uid, ticker, shares):
 def execute_open_short(eco, uid, ticker, shares):
     uid = str(uid)
     if not MARKET_STOCKS[ticker]["shortable"]:
-        return False, f"**${ticker}** cannot be shorted. Only **$DONOVAN** is shortable."
+        return False, f"**${ticker}** cannot be shorted."
     price = eco["market"][ticker]["price"]
     collateral = round(price * shares * 1.25, 2)
     bal = eco["balances"].get(uid, 0)
@@ -1824,8 +1824,7 @@ async def stock_market(ctx):
         pct = round((change / prev * 100) if prev else 0, 1)
         trend = "📉" if change < 0 else "📈"
         vol = mdata.get("volume_today", 0)
-        short_tag = " _(shortable)_" if info["shortable"] else ""
-        lines.append(f"**${ticker}** — ${price:.2f}  {trend} {change:+.2f} ({pct:+.1f}%)  Vol: {vol}{short_tag}")
+        lines.append(f"**${ticker}** — ${price:.2f}  {trend} {change:+.2f} ({pct:+.1f}%)  Vol: {vol}")
 
     # Top portfolio holders
     all_uids = set(eco.get("portfolios", {}).keys()) | set(eco.get("short_positions", {}).keys())
