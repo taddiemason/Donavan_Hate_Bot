@@ -679,13 +679,14 @@ def get_shop_rotation():
     eco = load_economy()
     now = datetime.datetime.now(datetime.timezone.utc)
     expires_str = eco.get("shop_rotation_expires")
-    if expires_str:
-        expires = datetime.datetime.fromisoformat(expires_str)
-    else:
-        expires = None
+    expires = datetime.datetime.fromisoformat(expires_str) if expires_str else None
     if not expires or now >= expires:
         rotation = random.sample(list(SHOP_ITEMS.keys()), 5)
-        next_expires = (now + datetime.timedelta(hours=24)).isoformat()
+        # expire at next midnight ET
+        et = ZoneInfo("America/New_York")
+        now_et = now.astimezone(et)
+        midnight_et = (now_et + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        next_expires = midnight_et.astimezone(datetime.timezone.utc).isoformat()
         eco["shop_rotation"] = rotation
         eco["shop_rotation_expires"] = next_expires
         save_economy(eco)
