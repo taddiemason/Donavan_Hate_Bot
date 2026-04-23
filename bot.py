@@ -838,10 +838,10 @@ SPORTS_TRIVIA_FALLBACKS = [
 ]
 
 
-async def generate_sports_question(sport, used_players=None):
+async def generate_sports_question(sport, used_topics=None):
     import re
-    avoid = (f"\nDo NOT ask about any of these already-used players or topics this game: {', '.join(used_players)}."
-             if used_players else "")
+    avoid = (f"\nDo NOT generate questions about any of these already-used topics: {'; '.join(used_topics)}."
+             if used_topics else "")
     try:
         response = await groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -851,9 +851,11 @@ async def generate_sports_question(sport, used_players=None):
                     "content": (
                         f"You are a sports trivia question generator. Generate one trivia question specifically about {sport} from 1990 to present.\n"
                         "STRICT RULES:\n"
-                        "- Only generate questions about famous, well-known facts you are 100% certain are correct\n"
-                        "- Stick to championship winners, MVP awards, and famous records by household-name players\n"
-                        "- Do NOT generate questions about obscure statistics or records you are not sure about\n"
+                        "- ONLY ask about championship/title winners: which team won a championship, or who was the starting QB/goalie/star player for a championship-winning team\n"
+                        "- Examples: 'Which team won the Stanley Cup in 2004?', 'Who was the starting quarterback for the Patriots when they won Super Bowl XXXIX?'\n"
+                        "- Do NOT ask about individual awards (MVP, Hart Trophy, Vezina, scoring titles, Conn Smythe, etc.) — these facts are too easy to get wrong\n"
+                        "- Do NOT ask about statistics, records, or draft picks\n"
+                        "- Only generate questions about facts you are 100% certain are correct\n"
                         "- ANSWER must be a last name only (for players) or a team name — nothing else\n"
                         "- Never put numbers, stats, or extra words in the ANSWER field\n"
                         f"{avoid}\n"
@@ -864,7 +866,7 @@ async def generate_sports_question(sport, used_players=None):
                 },
                 {"role": "user", "content": f"Generate a {sport} trivia question."},
             ],
-            max_tokens=100,
+            max_tokens=120,
         )
         text = response.choices[0].message.content.strip()
         question, answer = "", ""
@@ -1819,10 +1821,10 @@ async def sports_trivia(ctx):
         await asyncio.sleep(2)
 
         sport_rotation = ["NHL", "NFL", "NBA", "NHL", "NFL"]
-        used_players = []
+        used_topics = []
         for round_num, sport in enumerate(sport_rotation, 1):
-            question, answer = await generate_sports_question(sport, used_players)
-            used_players.append(answer)
+            question, answer = await generate_sports_question(sport, used_topics)
+            used_topics.append(f"{answer} (from: {question[:60]})")
 
             await ctx.send(f"**Round {round_num}/5**\n\n_{question}_\n\n⏱️ 30 seconds!")
 
