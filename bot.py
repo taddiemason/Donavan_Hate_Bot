@@ -1968,8 +1968,45 @@ async def commands_list(ctx):
 @bot.command(name="balance")
 async def balance(ctx, member: discord.Member = None):
     target = member or ctx.author
-    bal = load_economy()["balances"].get(str(target.id), 0)
-    await ctx.send(f"💰 **{target.display_name}** has **{bal} Roast Coins**.")
+    eco = load_economy()
+    init_market(eco)
+    init_derivatives(eco)
+    uid = str(target.id)
+    bal = eco["balances"].get(uid, 0)
+    portfolio = get_portfolio_value(eco, uid)
+
+    # Unrealized futures P&L
+    futures_pnl = 0.0
+    for pos in eco["futures"].get(uid, []):
+        price = eco["market"][pos["ticker"]]["price"]
+        if pos["direction"] == "long":
+            futures_pnl += (price - pos["entry_price"]) * pos["contracts"]
+        else:
+            futures_pnl += (pos["entry_price"] - price) * pos["contracts"]
+
+    # Unrealized options value
+    options_value = 0.0
+    for opt in eco["options"].get(uid, []):
+        if opt.get("exercised"):
+            continue
+        price = eco["market"][opt["ticker"]]["price"]
+        if opt["option_type"] == "call":
+            options_value += max(0, (price - opt["strike"]) * opt["contracts"])
+        else:
+            options_value += max(0, (opt["strike"] - price) * opt["contracts"])
+
+    total = round(bal + portfolio + futures_pnl + options_value, 2)
+    lines = [f"💰 **{target.display_name}**",
+             f"Cash: **{bal} coins**"]
+    if portfolio:
+        lines.append(f"Stocks/Shorts: **{portfolio:.0f} coins**")
+    if futures_pnl:
+        pnl_str = f"+{futures_pnl:.0f}" if futures_pnl >= 0 else f"{futures_pnl:.0f}"
+        lines.append(f"Futures P&L: **{pnl_str} coins**")
+    if options_value:
+        lines.append(f"Options Value: **{options_value:.0f} coins**")
+    lines.append(f"**Net Worth: {total:.0f} coins**")
+    await ctx.send("\n".join(lines))
 
 
 @bot.command(name="leaderboard")
