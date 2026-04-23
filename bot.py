@@ -885,6 +885,63 @@ async def generate_sports_question(sport, used_topics=None):
     return random.choice(SPORTS_TRIVIA_FALLBACKS)
 
 
+TRIVIA_CATEGORIES = [
+    "science and nature",
+    "world history",
+    "geography",
+    "movies and television",
+    "music",
+    "mathematics",
+    "food and drink",
+    "technology and computers",
+    "literature",
+    "pop culture",
+]
+
+
+async def generate_trivia_question():
+    import re
+    category = random.choice(TRIVIA_CATEGORIES)
+    try:
+        response = await groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"You are a trivia question generator. Generate one {category} trivia question.\n"
+                        "STRICT RULES:\n"
+                        "- Only use well-known, verifiable facts you are 100% certain are correct\n"
+                        "- The answer must be a single word, number, or short phrase (3 words max)\n"
+                        "- The answer must be at least 2 characters — no single-letter answers\n"
+                        "- Avoid questions with multiple valid answers\n"
+                        "Respond in EXACTLY this format:\n"
+                        "QUESTION: <question>\n"
+                        "ANSWER: <answer>"
+                    ),
+                },
+                {"role": "user", "content": f"Generate a {category} trivia question."},
+            ],
+            max_tokens=120,
+        )
+        text = response.choices[0].message.content.strip()
+        question, answer = "", ""
+        for line in text.split("\n"):
+            upper = line.upper()
+            if upper.startswith("QUESTION:"):
+                question = line[line.index(":") + 1:].strip()
+            elif upper.startswith("ANSWER:"):
+                raw = line[line.index(":") + 1:].strip()
+                raw = re.sub(r'[^\w\s]', '', raw).strip()
+                answer = " ".join(raw.split()[:3])
+        if question and answer and len(answer) >= 2:
+            return question, answer, category
+    except Exception as e:
+        print(f"[ERROR] Trivia generation failed: {e}")
+    q = random.choice(TRIVIA_QUESTIONS)
+    return q["q"], q["a"], "general knowledge"
+
+
 async def judge_sports_answer(question, expected, user_answer):
     try:
         response = await groq_client.chat.completions.create(
@@ -1613,20 +1670,19 @@ async def trivia(ctx):
         return
     trivia_active = True
     try:
-        recent = trivia_recent.get(ctx.channel.id, [])
-        pool = [q for q in TRIVIA_QUESTIONS if q["q"] not in recent] or TRIVIA_QUESTIONS
-        q = random.choice(pool)
-        recent.append(q["q"])
-        trivia_recent[ctx.channel.id] = recent[-5:]
-        await ctx.send(f"🧠 **TRIVIA** — First to answer wins **50 coins!**\n\n_{q['q']}_\n\nYou have 30 seconds!")
+        question, answer, category = await generate_trivia_question()
+        await ctx.send(
+            f"🧠 **TRIVIA** _{category.title()}_ — First to answer wins **50 coins!**\n\n"
+            f"_{question}_\n\nYou have 30 seconds!"
+        )
         def check(m):
-            return m.channel == ctx.channel and not m.author.bot and q["a"].lower() in m.content.lower()
+            return m.channel == ctx.channel and not m.author.bot and answer.lower() in m.content.lower()
         try:
             msg = await bot.wait_for("message", check=check, timeout=30)
             add_coins(msg.author.id, 50)
-            await ctx.send(f"✅ {msg.author.mention} got it! The answer was **{q['a'].title()}**. **+50 coins!**")
+            await ctx.send(f"✅ {msg.author.mention} got it! The answer was **{answer.title()}**. **+50 coins!**")
         except asyncio.TimeoutError:
-            await ctx.send(f"⏱️ Time's up! The answer was **{q['a'].title()}**.")
+            await ctx.send(f"⏱️ Time's up! The answer was **{answer.title()}**.")
     finally:
         trivia_active = False
 
