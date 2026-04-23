@@ -1127,7 +1127,7 @@ async def limit_order_checker():
             await channel.send(f"📋 {mention} Limit order **#{order_id}** {status}: {msg}")
 
 
-@tasks.loop(hours=1)
+@tasks.loop(minutes=10)
 async def meme_stock_drift():
     eco = load_economy()
     init_market(eco)
