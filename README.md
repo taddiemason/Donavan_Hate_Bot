@@ -172,7 +172,7 @@ This will:
 ### Option B — Manual (SSH into the server)
 
 ```bash
-git pull origin claude/fix-buyitem-command-LzavR
+git pull origin claude/fix-sports-trivia-HBbRZ
 pkill -f bot.py
 source venv/bin/activate
 python bot.py
@@ -189,7 +189,7 @@ pip install -r requirements.txt
 ### Option C — systemd restart
 
 ```bash
-git pull origin claude/fix-buyitem-command-LzavR
+git pull origin claude/fix-sports-trivia-HBbRZ
 sudo systemctl restart donavanbot
 ```
 

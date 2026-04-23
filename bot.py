@@ -203,7 +203,7 @@ tts_queue = asyncio.Queue()
 trial_active = False
 guess_game_active = False
 trivia_active = False
-trivia_answer = None
+trivia_recent = {}
 guessroast_active = False
 highlow_games = {}
 blackjack_games = {}
@@ -838,10 +838,10 @@ SPORTS_TRIVIA_FALLBACKS = [
 ]
 
 
-async def generate_sports_question(sport, used_players=None):
+async def generate_sports_question(sport, used_topics=None):
     import re
-    avoid = (f"\nDo NOT ask about any of these already-used players or topics this game: {', '.join(used_players)}."
-             if used_players else "")
+    avoid = (f"\nDo NOT generate questions about any of these already-used topics: {'; '.join(used_topics)}."
+             if used_topics else "")
     try:
         response = await groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -851,9 +851,11 @@ async def generate_sports_question(sport, used_players=None):
                     "content": (
                         f"You are a sports trivia question generator. Generate one trivia question specifically about {sport} from 1990 to present.\n"
                         "STRICT RULES:\n"
-                        "- Only generate questions about famous, well-known facts you are 100% certain are correct\n"
-                        "- Stick to championship winners, MVP awards, and famous records by household-name players\n"
-                        "- Do NOT generate questions about obscure statistics or records you are not sure about\n"
+                        "- ONLY ask about championship/title winners: which team won a championship, or who was the starting QB/goalie/star player for a championship-winning team\n"
+                        "- Examples: 'Which team won the Stanley Cup in 2004?', 'Who was the starting quarterback for the Patriots when they won Super Bowl XXXIX?'\n"
+                        "- Do NOT ask about individual awards (MVP, Hart Trophy, Vezina, scoring titles, Conn Smythe, etc.) — these facts are too easy to get wrong\n"
+                        "- Do NOT ask about statistics, records, or draft picks\n"
+                        "- Only generate questions about facts you are 100% certain are correct\n"
                         "- ANSWER must be a last name only (for players) or a team name — nothing else\n"
                         "- Never put numbers, stats, or extra words in the ANSWER field\n"
                         f"{avoid}\n"
@@ -864,7 +866,7 @@ async def generate_sports_question(sport, used_players=None):
                 },
                 {"role": "user", "content": f"Generate a {sport} trivia question."},
             ],
-            max_tokens=100,
+            max_tokens=120,
         )
         text = response.choices[0].message.content.strip()
         question, answer = "", ""
@@ -881,6 +883,63 @@ async def generate_sports_question(sport, used_players=None):
     except Exception as e:
         print(f"[ERROR] Sports trivia generation failed: {e}")
     return random.choice(SPORTS_TRIVIA_FALLBACKS)
+
+
+TRIVIA_CATEGORIES = [
+    "science and nature",
+    "world history",
+    "geography",
+    "movies and television",
+    "music",
+    "mathematics",
+    "food and drink",
+    "technology and computers",
+    "literature",
+    "pop culture",
+]
+
+
+async def generate_trivia_question():
+    import re
+    category = random.choice(TRIVIA_CATEGORIES)
+    try:
+        response = await groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"You are a trivia question generator. Generate one {category} trivia question.\n"
+                        "STRICT RULES:\n"
+                        "- Only use well-known, verifiable facts you are 100% certain are correct\n"
+                        "- The answer must be a single word, number, or short phrase (3 words max)\n"
+                        "- The answer must be at least 2 characters — no single-letter answers\n"
+                        "- Avoid questions with multiple valid answers\n"
+                        "Respond in EXACTLY this format:\n"
+                        "QUESTION: <question>\n"
+                        "ANSWER: <answer>"
+                    ),
+                },
+                {"role": "user", "content": f"Generate a {category} trivia question."},
+            ],
+            max_tokens=120,
+        )
+        text = response.choices[0].message.content.strip()
+        question, answer = "", ""
+        for line in text.split("\n"):
+            upper = line.upper()
+            if upper.startswith("QUESTION:"):
+                question = line[line.index(":") + 1:].strip()
+            elif upper.startswith("ANSWER:"):
+                raw = line[line.index(":") + 1:].strip()
+                raw = re.sub(r'[^\w\s]', '', raw).strip()
+                answer = " ".join(raw.split()[:3])
+        if question and answer and len(answer) >= 2:
+            return question, answer, category
+    except Exception as e:
+        print(f"[ERROR] Trivia generation failed: {e}")
+    q = random.choice(TRIVIA_QUESTIONS)
+    return q["q"], q["a"], "general knowledge"
 
 
 async def judge_sports_answer(question, expected, user_answer):
@@ -1159,6 +1218,78 @@ async def derivatives_settlement():
     save_economy(eco)
 
 
+@tasks.loop(minutes=5)
+async def margin_call_checker():
+    if not ROAST_CHANNEL_ID:
+        return
+    eco = load_economy()
+    init_market(eco)
+    channel = bot.get_channel(ROAST_CHANNEL_ID)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    squeeze_msgs = []
+
+    # Check for short squeezes before running margin calls
+    for ticker, info in MARKET_STOCKS.items():
+        if ticker not in eco["market"]:
+            continue
+        outstanding = info["shares_outstanding"]
+        shorted = sum(
+            pos[ticker]["shares"]
+            for pos in eco.get("short_positions", {}).values()
+            if ticker in pos
+        )
+        if shorted / outstanding <= 0.20:
+            continue
+        last_str = eco["market"][ticker].get("last_squeeze")
+        if last_str and now - datetime.datetime.fromisoformat(last_str) < datetime.timedelta(hours=1):
+            continue
+        spike_pct = random.uniform(15, 30)
+        old = eco["market"][ticker]["price"]
+        new = round(old * (1 + spike_pct / 100), 2)
+        eco["market"][ticker]["prev_price"] = old
+        eco["market"][ticker]["price"] = new
+        eco["market"][ticker]["last_squeeze"] = now.isoformat()
+        squeeze_msgs.append((ticker, old, new, round(shorted / outstanding * 100, 1), spike_pct))
+
+    # Run margin calls (catches positions squeezed above threshold)
+    liquidations = []
+    for uid, positions in list(eco.get("short_positions", {}).items()):
+        for ticker in list(positions.keys()):
+            pos = positions[ticker]
+            price = eco["market"][ticker]["price"]
+            loss = (price - pos["avg_price"]) * pos["shares"]
+            if loss >= pos["collateral"] * 0.80:
+                pnl = round((pos["avg_price"] - price) * pos["shares"], 2)
+                returned = max(round(pos["collateral"] + pnl, 2), 0)
+                apply_price_impact(eco, ticker, pos["shares"], +1)
+                eco["balances"][uid] = eco["balances"].get(uid, 0) + returned
+                del eco["short_positions"][uid][ticker]
+                if not eco["short_positions"][uid]:
+                    del eco["short_positions"][uid]
+                liquidations.append((uid, ticker, pos["shares"], price, pnl, returned))
+
+    if squeeze_msgs or liquidations:
+        save_economy(eco)
+    if channel:
+        for ticker, old, new, si_pct, spike_pct in squeeze_msgs:
+            await channel.send(
+                f"🔥 **SHORT SQUEEZE — ${ticker}!** Short interest hit **{si_pct:.1f}%** of float. "
+                f"Price spiked **+{spike_pct:.1f}%**: **${old:.2f}** → **${new:.2f}**. "
+                f"Short sellers getting squeezed! 💀"
+            )
+        for uid, ticker, shares, price, pnl, returned in liquidations:
+            member = channel.guild.get_member(int(uid))
+            mention = member.mention if member else f"<@{uid}>"
+            pnl_str = f"+{pnl:.0f}" if pnl >= 0 else str(round(pnl))
+            await channel.send(
+                f"🚨 **MARGIN CALL** — {mention}'s short on **${ticker}** ({shares} shares) was "
+                f"force-liquidated at **${price:.2f}**. "
+                f"P&L: **{pnl_str} coins** | Returned: **{returned:.0f} coins**"
+            )
+
+
+
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
@@ -1166,6 +1297,7 @@ async def on_ready():
     weekly_recap.start()
     limit_order_checker.start()
     derivatives_settlement.start()
+    margin_call_checker.start()
     meme_stock_drift.start()
     asyncio.ensure_future(tts_worker())
 
@@ -1216,13 +1348,7 @@ async def on_message(message):
                 del highlow_games[message.author.id]
                 await message.channel.send(f"💰 Cashed out at **{game['multiplier']}x**! You won **{winnings} coins**!")
 
-    # Trivia answer check
-    if trivia_active and trivia_answer and not message.author.bot:
-        if trivia_answer.lower() in message.content.lower():
-            globals()["trivia_active"] = False
-            reward = 50
-            add_coins(message.author.id, reward)
-            await message.channel.send(f"✅ {message.author.mention} got it! The answer was **{trivia_answer}**. **+{reward} coins!**")
+    # Trivia answer check handled by wait_for inside the !trivia command
 
     # Guess the roast answer check
     if guessroast_active and not message.author.bot:
@@ -1538,19 +1664,27 @@ async def slots(ctx, amount: int = None):
 
 @bot.command(name="trivia")
 async def trivia(ctx):
-    global trivia_active, trivia_answer
+    global trivia_active
     if trivia_active:
         await ctx.send("A trivia question is already active!")
         return
     trivia_active = True
-    q = random.choice(TRIVIA_QUESTIONS)
-    trivia_answer = q["a"]
-    await ctx.send(f"🧠 **TRIVIA** — First to answer wins **50 coins!**\n\n_{q['q']}_\n\nYou have 30 seconds!")
-    await asyncio.sleep(30)
-    if trivia_active:
+    try:
+        question, answer, category = await generate_trivia_question()
+        await ctx.send(
+            f"🧠 **TRIVIA** _{category.title()}_ — First to answer wins **50 coins!**\n\n"
+            f"_{question}_\n\nYou have 30 seconds!"
+        )
+        def check(m):
+            return m.channel == ctx.channel and not m.author.bot and answer.lower() in m.content.lower()
+        try:
+            msg = await bot.wait_for("message", check=check, timeout=30)
+            add_coins(msg.author.id, 50)
+            await ctx.send(f"✅ {msg.author.mention} got it! The answer was **{answer.title()}**. **+50 coins!**")
+        except asyncio.TimeoutError:
+            await ctx.send(f"⏱️ Time's up! The answer was **{answer.title()}**.")
+    finally:
         trivia_active = False
-        trivia_answer = None
-        await ctx.send(f"⏱️ Time's up! The answer was **{q['a']}**.")
 
 
 @bot.command(name="guessroast")
@@ -1819,10 +1953,10 @@ async def sports_trivia(ctx):
         await asyncio.sleep(2)
 
         sport_rotation = ["NHL", "NFL", "NBA", "NHL", "NFL"]
-        used_players = []
+        used_topics = []
         for round_num, sport in enumerate(sport_rotation, 1):
-            question, answer = await generate_sports_question(sport, used_players)
-            used_players.append(answer)
+            question, answer = await generate_sports_question(sport, used_topics)
+            used_topics.append(f"{answer} (from: {question[:60]})")
 
             await ctx.send(f"**Round {round_num}/5**\n\n_{question}_\n\n⏱️ 30 seconds!")
 
@@ -1916,7 +2050,14 @@ async def stock_market(ctx):
         pct = round((change / prev * 100) if prev else 0, 1)
         trend = "📉" if change < 0 else "📈"
         vol = mdata.get("volume_today", 0)
-        lines.append(f"**${ticker}** — ${price:.2f}  {trend} {change:+.2f} ({pct:+.1f}%)  Vol: {vol}")
+        shorted = sum(
+            pos[ticker]["shares"]
+            for pos in eco.get("short_positions", {}).values()
+            if ticker in pos
+        )
+        si_pct = round(shorted / info["shares_outstanding"] * 100, 1)
+        si_str = f"  🔥 SI: {si_pct}%" if si_pct > 0 else ""
+        lines.append(f"**${ticker}** — ${price:.2f}  {trend} {change:+.2f} ({pct:+.1f}%)  Vol: {vol}{si_str}")
 
     # Top portfolio holders
     all_uids = set(eco.get("portfolios", {}).keys()) | set(eco.get("short_positions", {}).keys())
@@ -2039,16 +2180,45 @@ async def balance(ctx, member: discord.Member = None):
 @bot.command(name="leaderboard")
 async def leaderboard(ctx):
     eco = load_economy()
-    top = sorted(eco["balances"].items(), key=lambda x: x[1], reverse=True)[:5]
-    if not top:
+    init_market(eco)
+    init_derivatives(eco)
+    if not eco["balances"]:
         await ctx.send("Nobody has earned any Roast Coins yet.")
         return
+
+    def net_worth(uid):
+        uid = str(uid)
+        cash = eco["balances"].get(uid, 0)
+        portfolio = get_portfolio_value(eco, uid)
+        futures_pnl = sum(
+            (p["entry_price"] - eco["market"][p["ticker"]]["price"]) * p["contracts"]
+            if p["direction"] == "short"
+            else (eco["market"][p["ticker"]]["price"] - p["entry_price"]) * p["contracts"]
+            for p in eco["futures"].get(uid, [])
+            if p["ticker"] in eco["market"]
+        )
+        options_val = sum(
+            max(0, (eco["market"][o["ticker"]]["price"] - o["strike"]) * o["contracts"])
+            if o["option_type"] == "call"
+            else max(0, (o["strike"] - eco["market"][o["ticker"]]["price"]) * o["contracts"])
+            for o in eco["options"].get(uid, [])
+            if not o.get("exercised") and o["ticker"] in eco["market"]
+        )
+        return round(cash + portfolio + futures_pnl + options_val, 2)
+
+    top = sorted(eco["balances"].keys(), key=net_worth, reverse=True)[:5]
     lines = []
-    for i, (uid, coins) in enumerate(top, 1):
+    for i, uid in enumerate(top, 1):
         member = ctx.guild.get_member(int(uid))
         name = member.display_name if member else "Unknown"
-        lines.append(f"{i}. **{name}** — {coins} coins")
-    await ctx.send("💰 **Roast Coin Leaderboard**\n" + "\n".join(lines))
+        cash = round(eco["balances"].get(str(uid), 0))
+        total = net_worth(uid)
+        portfolio = round(total - cash)
+        if portfolio:
+            lines.append(f"{i}. **{name}** — {total:.0f} coins net worth _(cash: {cash} + investments: {portfolio})_")
+        else:
+            lines.append(f"{i}. **{name}** — {total:.0f} coins")
+    await ctx.send("💰 **Roast Coin Leaderboard** _(ranked by net worth)_\n" + "\n".join(lines))
 
 
 @bot.command(name="shop")
