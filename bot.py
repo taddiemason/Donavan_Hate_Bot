@@ -679,13 +679,14 @@ def get_shop_rotation():
     eco = load_economy()
     now = datetime.datetime.now(datetime.timezone.utc)
     expires_str = eco.get("shop_rotation_expires")
-    if expires_str:
-        expires = datetime.datetime.fromisoformat(expires_str)
-    else:
-        expires = None
+    expires = datetime.datetime.fromisoformat(expires_str) if expires_str else None
     if not expires or now >= expires:
         rotation = random.sample(list(SHOP_ITEMS.keys()), 5)
-        next_expires = (now + datetime.timedelta(hours=24)).isoformat()
+        # expire at next midnight ET
+        et = ZoneInfo("America/New_York")
+        now_et = now.astimezone(et)
+        midnight_et = (now_et + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        next_expires = midnight_et.astimezone(datetime.timezone.utc).isoformat()
         eco["shop_rotation"] = rotation
         eco["shop_rotation_expires"] = next_expires
         save_economy(eco)
@@ -1932,10 +1933,10 @@ async def stock_market(ctx):
     await ctx.send("\n".join(lines))
 
 
-@bot.command(name="Commands")
+@bot.command(name="Commands", aliases=["commands"])
 async def commands_list(ctx):
     await ctx.send(
-        "**📋 Donovan Hate Bot — Commands (1/2)**\n\n"
+        "**📋 Donovan Hate Bot — Commands (1/3)**\n\n"
         "**`@Donovan Hate Bot`** — Roasts Donovan. Ask it a question for a smart response.\n"
         "**`!Trial <reason>`** — Puts Donovan on trial. Server votes guilty/not guilty for 60 seconds.\n"
         "**`!Guesswhosaidit`** — 3 round game. Guess if the quote was Donovan or someone else.\n"
@@ -1953,10 +1954,10 @@ async def commands_list(ctx):
         "**`!give @user <amount>`** — Transfer coins to another member.\n"
         "**`!blackmarket`** — View peer-to-peer upgrade listings.\n"
         "**`!listitem <item> <price>`** — List an owned upgrade for sale.\n"
-        "**`!stockmarket`** — View Donovan's tanking stock price and top roaster rankings."
+        "**`!buyitem <id>`** — Buy an upgrade from the black market."
     )
     await ctx.send(
-        "**📋 Donovan Hate Bot — Commands (2/2)**\n\n"
+        "**📋 Donovan Hate Bot — Commands (2/3)**\n\n"
         "**🎮 Minigames & Rewards**\n"
         "**`!daily`** — 25 coin daily check-in. Streak builds a multiplier, doubles at 7 days.\n"
         "**`!flip <amount> heads/tails`** — Coinflip gamble.\n"
@@ -1967,9 +1968,27 @@ async def commands_list(ctx):
         "**`!dice @user <amount>`** — Challenge someone to a dice duel. Roll 1-100, highest wins the pot. Ties re-roll.\n"
         "**`!highlow <amount>`** — Guess higher or lower, chain correct answers for a multiplier.\n"
         "**`!blackjack [bet]`** — Multiplayer blackjack vs the dealer. Bet defaults to 10 coins. Others can join before the round starts.\n"
-        "**`!lottery <amount>`** — Buy lottery tickets (10 coins each). Drawn every Sunday at 9 PM EST.\n"
-        "**`!buyitem <id>`** — Buy an upgrade from the black market.\n\n"
-        "**`!Commands`** — Shows this list."
+        "**`!lottery <amount>`** — Buy lottery tickets (10 coins each). Drawn every Sunday at 9 PM EST."
+    )
+    await ctx.send(
+        "**📋 Donovan Hate Bot — Commands (3/3)**\n\n"
+        "**📈 Stock Market**\n"
+        "**`!stockmarket`** — View current prices for all stocks ($DONOVAN, $RUST, $BIGMAC, $TORTA, $TRUMP, $COCAINE).\n"
+        "**`!buystock <TICKER> <shares>`** — Buy shares at market price.\n"
+        "**`!sellstock <TICKER> <shares>`** — Sell shares you own.\n"
+        "**`!short <TICKER> <shares>`** — Open a short position (profit if price drops).\n"
+        "**`!cover <TICKER> <shares>`** — Close a short position.\n"
+        "**`!portfolio [@user]`** — View your (or someone else's) open positions and P&L.\n"
+        "**`!limitorder <buy|sell|short|cover> <TICKER> <shares> <price>`** — Place a limit order that fills automatically.\n"
+        "**`!orders`** — View your pending limit orders.\n"
+        "**`!cancellimit <id>`** — Cancel a pending limit order.\n"
+        "**`!futures <long|short> <TICKER> <contracts>`** — Open a leveraged 7-day futures contract (20% margin).\n"
+        "**`!closefutures <id>`** — Close a futures contract early.\n"
+        "**`!myfutures`** — View your open futures contracts.\n"
+        "**`!buyoption <call|put> <TICKER> <contracts> <strike> [days]`** — Buy a call or put option.\n"
+        "**`!exercise <id>`** — Exercise an option if it's in the money.\n"
+        "**`!myoptions`** — View your open options.\n\n"
+        "**`!commands`** — Shows this list."
     )
 
 
