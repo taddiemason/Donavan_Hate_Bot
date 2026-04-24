@@ -1340,9 +1340,9 @@ async def _start_admin_server():
     app = create_web_app(load_economy, save_economy, get_shop_rotation, SHOP_ITEMS, MARKET_STOCKS, bot)
     runner = aiohttp.web.AppRunner(app)
     await runner.setup()
-    site = aiohttp.web.TCPSite(runner, "127.0.0.1", 47832)
+    site = aiohttp.web.TCPSite(runner, "0.0.0.0", 47832)
     await site.start()
-    print(f"Admin dashboard running at http://127.0.0.1:47832")
+    print(f"Admin dashboard running at http://0.0.0.0:47832")
 
 
 @bot.event
