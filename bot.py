@@ -895,7 +895,7 @@ def save_economy(data):
 def add_coins(user_id, amount):
     eco = load_economy()
     uid = str(user_id)
-    eco["balances"][uid] = eco["balances"].get(uid, 0) + amount
+    eco["balances"][uid] = round(eco["balances"].get(uid, 0) + amount, 2)
     save_economy(eco)
 
 
@@ -905,7 +905,7 @@ def spend_coins(user_id, amount):
     bal = eco["balances"].get(uid, 0)
     if bal < amount:
         return False
-    eco["balances"][uid] = bal - amount
+    eco["balances"][uid] = round(bal - amount, 2)
     save_economy(eco)
     return True
 
@@ -2085,9 +2085,18 @@ async def slots(ctx, amount: int = None):
     if mult > 0:
         winnings = amount * mult
         add_coins(ctx.author.id, winnings)
-        await ctx.send(f"🎰 [ {display} ]\n**{mult}x PAYOUT!** You won **{winnings} coins!**")
+        try:
+            await ctx.send(f"🎰 [ {display} ]\n**{mult}x PAYOUT!** You won **{winnings} coins!**")
+        except Exception:
+            add_coins(ctx.author.id, -winnings)
+            add_coins(ctx.author.id, amount)
+            raise
     else:
-        await ctx.send(f"🎰 [ {display} ]\nNo match. You lost **{amount} coins**.")
+        try:
+            await ctx.send(f"🎰 [ {display} ]\nNo match. You lost **{amount} coins**.")
+        except Exception:
+            add_coins(ctx.author.id, amount)
+            raise
 
 
 @bot.command(name="trivia")
