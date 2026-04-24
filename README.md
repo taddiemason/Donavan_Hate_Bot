@@ -103,6 +103,71 @@ The bot is now live. @mention it in any channel and it will respond with a rando
 
 ---
 
+## Admin Panel
+
+When the bot starts it also launches a local web dashboard. Open it in your browser at:
+
+```
+http://localhost:47832
+```
+
+> If port 47832 is already in use the bot will automatically try 47833, 47834 … up to 47841. Check the terminal output for the actual port — it prints `Admin dashboard running at http://0.0.0.0:<port>` on startup.
+
+### Logging in
+
+The panel is password-protected. Set your password in `.env`:
+
+```
+ADMIN_PASSWORD=change_me_to_something_secret
+```
+
+If `ADMIN_PASSWORD` is not set it defaults to `admin` — **change this before exposing the port to a network**.
+
+---
+
+### Pages
+
+#### Dashboard (`/`)
+Overview of the economy at a glance:
+- Total users and coins in circulation
+- Today's shop rotation and time until it refreshes
+- Top 5 coin balances
+- Current stock prices
+
+#### Economy (`/economy`)
+Full leaderboard showing every user's cash, portfolio value, and net worth.
+
+**Adjusting a user's coins:**
+1. Enter the user's Discord ID in the **User ID** field (right-click a user in Discord → *Copy User ID*)
+2. Enter an amount
+3. Pick **Add**, **Remove**, or **Set** from the dropdown
+4. Click **Apply**
+
+You can also click any username in the table to go to their individual user page.
+
+#### Shop (`/shop`)
+Shows the items currently available in the daily shop rotation along with their cost and description, plus the time remaining until the rotation refreshes automatically.
+
+**Force-resetting the shop:**  
+Click **Reset Shop Now** to immediately cycle to a new set of items, excluding the current ones. Useful if you want to give the server a fresh selection without waiting for the daily timer.
+
+#### Stocks (`/stocks`)
+Lists every tracked stock with its current price and short-interest percentage (highlighted yellow above 10 %, red above 20 %).
+
+**Overriding a stock price:**  
+Each row has a price input. Change the value and click **Set** to pin the stock to that price. Normal drift will continue from the new value on the next tick.
+
+#### User detail (`/user/<discord-id>`)
+Drill into a specific user to see:
+- Cash, portfolio value, and net worth summary cards
+- Long stock positions (ticker, shares, current price, total value)
+- Short positions with entry price, current price, and live P&L
+- Inventory of shop items
+
+You can also adjust that user's coin balance directly from this page.
+
+---
+
 ## Keeping the Bot Running 24/7
 
 By default the bot stops when you close your terminal. To keep it running persistently:
@@ -235,6 +300,7 @@ Don't run both manually and via systemd at the same time — pick one method and
 | File | Purpose |
 |------|---------|
 | `bot.py` | Main bot logic |
+| `web_admin.py` | Admin dashboard web server |
 | `requirements.txt` | Python dependencies |
-| `.env.example` | Template for your bot token |
+| `.env.example` | Template for your bot token and admin password |
 | `.gitignore` | Prevents `.env` from being committed |
