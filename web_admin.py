@@ -155,7 +155,7 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot)
         for ticker, info in market_stocks.items():
             price = eco.get("market", {}).get(ticker, {}).get("price", info.get("base_price", 0))
             stock_rows += (
-                f"<tr><td><b>{ticker}</b></td><td>{info['name']}</td>"
+                f"<tr><td><b>{ticker}</b></td><td>{info.get('name', ticker)}</td>"
                 f"<td>{price:.2f}</td></tr>"
             )
 
@@ -330,7 +330,7 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot)
             si_pct = (total_shorted / outstanding * 100) if outstanding else 0
             si_class = "red" if si_pct > 20 else ("yellow" if si_pct > 10 else "green")
             rows += f"""<tr>
-  <td><b>{ticker}</b></td><td>{info['name']}</td>
+  <td><b>{ticker}</b></td><td>{info.get('name', ticker)}</td>
   <td>{price:.2f}</td>
   <td class="{si_class}">{si_pct:.1f}%</td>
   <td>
