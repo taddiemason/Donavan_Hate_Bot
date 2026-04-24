@@ -402,6 +402,10 @@ MARKET_STOCKS = {
     "TORTA":   {"name": "Torta Brothers LLC",        "base_price": 12.50, "shares_outstanding": 5000,  "shortable": True, "volatility": 1.5, "mean_reversion": 0.04},
     "TRUMP":   {"name": "Trump Media & Golf Co.",    "base_price": 75.0,  "shares_outstanding": 5000,  "shortable": True, "volatility": 3.5, "mean_reversion": 0.015},
     "COCAINE": {"name": "Cartel Pharmaceuticals",    "base_price": 420.0, "shares_outstanding": 2000,  "shortable": True, "volatility": 5.0, "mean_reversion": 0.01},
+    "TBELL":   {"name": "Taco Bell Enterprises",     "base_price": 29.99, "shares_outstanding": 8000,  "shortable": True, "volatility": 3.0, "mean_reversion": 0.03},
+    "OHIO":    {"name": "Ohio Ventures LLC",         "base_price": 69.0,  "shares_outstanding": 4200,  "shortable": True, "volatility": 8.0, "mean_reversion": 0.005},
+    "FLORIDA": {"name": "Florida Man Holdings",      "base_price": 55.0,  "shares_outstanding": 3500,  "shortable": True, "volatility": 6.0, "mean_reversion": 0.01},
+    "YEEZY":   {"name": "Ye Industries",             "base_price": 88.0,  "shares_outstanding": 1000,  "shortable": True, "volatility": 9.0, "mean_reversion": 0.005},
 }
 
 _ANALYST_QUOTES = [
@@ -485,6 +489,61 @@ _STOCK_NEWS = {
         {"headline": "{member} spotted outside SEC building carrying unmarked briefcase",              "impact": (-10, -3)},
         {"headline": "Walter White biopic greenlit — COCAINE surges on nostalgia",                   "impact": (10, 20)},
         {"headline": "Cartel enters strategic partnership with Torta Brothers LLC",                   "impact": (8, 16),   "linked": [("TORTA", (4, 10))]},
+    ],
+    "TBELL": [
+        {"headline": "4th meal rush overwhelms Taco Bell kitchen — {member} still waiting",           "impact": (-6, -1)},
+        {"headline": "Taco Bell introduces new item — discontinued 48 hours later",                   "impact": (-5, 8)},
+        {"headline": "Late night Taco Bell run goes wrong — {member} refuses to elaborate",           "impact": (-10, -2)},
+        {"headline": "Taco Bell breakfast makes unexpected comeback",                                  "impact": (5, 14)},
+        {"headline": "Taco Bell vs Torta Brothers rivalry reaches boiling point",                     "impact": (6, 14),   "linked": [("TORTA", (-8, -3))]},
+        {"headline": "Taco Bell sauce packet philosophy goes viral — investors intrigued",             "impact": (4, 12)},
+        {"headline": "Regional Taco Bell runs out of beef — details unclear",                         "impact": (-12, -5)},
+        {"headline": "Taco Bell 4th meal hours extended to 6am — stock soars",                       "impact": (8, 18)},
+        {"headline": "Taco Bell and COCAINE announce cross-promotional deal",                         "impact": (5, 12),   "linked": [("COCAINE", (3, 8))]},
+        {"headline": "Taco Bell drive-thru sets new record wait time: 47 minutes",                   "impact": (-8, -3)},
+        {"headline": "{member} petitions to have Taco Bell replace tortas nationally",                "impact": (4, 10),   "linked": [("TORTA", (-5, -2))]},
+    ],
+    "OHIO": [
+        {"headline": "Something happened in Ohio",                                                     "impact": (-20, 20)},
+        {"headline": "Ohio does it again",                                                             "impact": (-18, 18)},
+        {"headline": "Residents of Ohio report unusual activity — no further details",                "impact": (-15, 15)},
+        {"headline": "Ohio",                                                                           "impact": (-25, 25)},
+        {"headline": "Another day in Ohio",                                                            "impact": (-20, 20)},
+        {"headline": "It happened again in Ohio. You know what we're talking about.",                 "impact": (-22, 22)},
+        {"headline": "Ohio confirms: this is fine",                                                    "impact": (-18, 15)},
+        {"headline": "Analysts visit Ohio — refuse to comment on what they saw",                      "impact": (-20, 10)},
+        {"headline": "Ohio opens investigation into itself",                                           "impact": (-12, 12)},
+        {"headline": "{member} spotted in Ohio — loved ones notified",                                "impact": (-20, 20)},
+        {"headline": "Ohio man does Ohio man things",                                                  "impact": (-25, 25)},
+        {"headline": "Ohio",                                                                           "impact": (-30, 30)},
+    ],
+    "FLORIDA": [
+        {"headline": "Florida man {member} arrested for unspecified crimes against nature",           "impact": (-14, -4)},
+        {"headline": "Florida passes new law — legal experts speechless",                             "impact": (-10, 10)},
+        {"headline": "Florida man wrestles alligator in Walmart — wins",                              "impact": (5, 18)},
+        {"headline": "Florida city declares state of emergency over 'vibes'",                         "impact": (-8, 8)},
+        {"headline": "Florida real estate market defies all logic again",                             "impact": (6, 16)},
+        {"headline": "Florida man runs for office — somehow leads in polls",                          "impact": (8, 15),   "linked": [("TRUMP", (2, 8))]},
+        {"headline": "Hurricane approaches Florida — residents throw a party",                        "impact": (-12, 5)},
+        {"headline": "Florida man invents new crime — legislators scramble",                          "impact": (-6, 6)},
+        {"headline": "Florida governor does Florida governor things",                                  "impact": (-10, 12), "linked": [("TRUMP", (3, 8))]},
+        {"headline": "{member} relocates to Florida — neighbourhood files complaint",                 "impact": (-8, -2)},
+        {"headline": "Florida man escapes prison to attend Taco Bell — immediately recaptured",       "impact": (4, 10),   "linked": [("TBELL", (2, 6))]},
+        {"headline": "Florida declared most chaotic state — FLORIDA investors celebrate",             "impact": (10, 20)},
+    ],
+    "YEEZY": [
+        {"headline": "Ye posts 47-tweet thread at 3am — all deleted by morning",                      "impact": (-15, 15)},
+        {"headline": "YEEZY delists from exchange — no explanation given",                            "impact": (-45, -25)},
+        {"headline": "YEEZY relists at completely new price — nobody understands why",                "impact": (40, 90)},
+        {"headline": "Ye announces new religion — YEEZY investors deeply concerned",                  "impact": (-20, -8)},
+        {"headline": "Ye changes name again — SEC sends strongly worded letter",                      "impact": (-12, 5)},
+        {"headline": "Ye calls {member} a genius — stock pumps on confusion",                        "impact": (10, 22)},
+        {"headline": "Ye calls {member} his mortal enemy — stock craters",                           "impact": (-22, -8)},
+        {"headline": "YEEZY shoe drops — sells out in 3 minutes, immediately listed at 10x on eBay", "impact": (15, 30)},
+        {"headline": "Ye announces presidential run — market prices in full chaos",                   "impact": (-18, 18)},
+        {"headline": "Ye partners with Donovan — analysts declare it 'the worst deal in history'",   "impact": (-20, -10), "linked": [("DONOVAN", (-12, -5))]},
+        {"headline": "Ye goes on podcast — says something. Markets react.",                           "impact": (-25, 25)},
+        {"headline": "YEEZY announces pivot to blockchain — trading halted",                          "impact": (-30, 10)},
     ],
 }
 
@@ -1400,6 +1459,9 @@ async def meme_stock_drift():
         base = info["base_price"]
         vol = info["volatility"]
         mr = info["mean_reversion"]
+
+        if ticker == "TBELL" and (now.hour >= 22 or now.hour < 4):
+            vol *= 3.0  # 4th meal hours: 10pm–4am UTC
 
         mean_rev_pct = (base - price) / base * mr * 100
         history = mdata.get("price_history", [price])
