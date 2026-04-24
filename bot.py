@@ -651,7 +651,7 @@ def init_market(eco):
     else:
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         for ticker, info in MARKET_STOCKS.items():
-            if ticker not in eco["market"]:
+            if ticker not in eco["market"] or "price" not in eco["market"][ticker]:
                 eco["market"][ticker] = {
                     "price": info["base_price"],
                     "prev_price": info["base_price"],
