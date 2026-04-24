@@ -682,7 +682,12 @@ def get_shop_rotation():
     expires_str = eco.get("shop_rotation_expires")
     expires = datetime.datetime.fromisoformat(expires_str) if expires_str else None
     if not expires or now >= expires:
-        rotation = random.sample(list(SHOP_ITEMS.keys()), 5)
+        old_rotation = eco.get("shop_rotation") or []
+        available = [k for k in SHOP_ITEMS.keys() if k not in old_rotation]
+        if len(available) >= 5:
+            rotation = random.sample(available, 5)
+        else:
+            rotation = random.sample(list(SHOP_ITEMS.keys()), 5)
         # expire at next midnight ET
         et = ZoneInfo("America/New_York")
         now_et = now.astimezone(et)
@@ -2295,6 +2300,26 @@ async def shop(ctx):
         f"🛒 **Roast Shop** — Today's Rotation _(refreshes in {hours_left}h {minutes_left}m)_\n\n"
         + "\n\n".join(lines)
         + "\n\nUse `!buy <item>` to purchase."
+    )
+
+
+@bot.command(name="resetshop")
+@commands.has_permissions(administrator=True)
+async def resetshop(ctx):
+    eco = load_economy()
+    eco["shop_rotation"] = None
+    eco["shop_rotation_expires"] = None
+    save_economy(eco)
+    rotation, expires = get_shop_rotation()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    seconds_left = int((expires - now).total_seconds())
+    hours_left = seconds_left // 3600
+    minutes_left = (seconds_left % 3600) // 60
+    lines = [f"**{SHOP_ITEMS[k]['name']}** (`{k}`) — {SHOP_ITEMS[k]['cost']} coins"
+             for k in rotation if k in SHOP_ITEMS]
+    await ctx.send(
+        f"🔄 Shop rotation reset! New rotation (expires in {hours_left}h {minutes_left}m):\n"
+        + "\n".join(lines)
     )
 
 
