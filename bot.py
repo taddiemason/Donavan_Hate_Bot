@@ -203,7 +203,8 @@ tts_queue = asyncio.Queue()
 trial_active = False
 guess_game_active = False
 trivia_active = False
-trivia_recent = {}
+trivia_recent = {}        # channel_id -> last 8 question strings
+trivia_recent_cats = {}   # channel_id -> last 4 categories
 guessroast_active = False
 highlow_games = {}
 blackjack_games = {}
@@ -899,9 +900,13 @@ TRIVIA_CATEGORIES = [
 ]
 
 
-async def generate_trivia_question():
+async def generate_trivia_question(used_topics=None, used_categories=None):
     import re
-    category = random.choice(TRIVIA_CATEGORIES)
+    # Avoid repeating recent categories
+    available = [c for c in TRIVIA_CATEGORIES if not used_categories or c not in used_categories]
+    category = random.choice(available or TRIVIA_CATEGORIES)
+    avoid = (f"\nDo NOT generate questions about these already-asked topics: {'; '.join(used_topics)}."
+             if used_topics else "")
     try:
         response = await groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -915,6 +920,7 @@ async def generate_trivia_question():
                         "- The answer must be a single word, number, or short phrase (3 words max)\n"
                         "- The answer must be at least 2 characters — no single-letter answers\n"
                         "- Avoid questions with multiple valid answers\n"
+                        f"{avoid}\n"
                         "Respond in EXACTLY this format:\n"
                         "QUESTION: <question>\n"
                         "ANSWER: <answer>"
@@ -1699,7 +1705,14 @@ async def trivia(ctx):
         return
     trivia_active = True
     try:
-        question, answer, category = await generate_trivia_question()
+        recent_q = trivia_recent.get(ctx.channel.id, [])
+        recent_cats = trivia_recent_cats.get(ctx.channel.id, [])
+        question, answer, category = await generate_trivia_question(
+            used_topics=recent_q or None,
+            used_categories=recent_cats or None,
+        )
+        trivia_recent[ctx.channel.id] = (recent_q + [question])[-8:]
+        trivia_recent_cats[ctx.channel.id] = (recent_cats + [category])[-4:]
         await ctx.send(
             f"🧠 **TRIVIA** _{category.title()}_ — First to answer wins **50 coins!**\n\n"
             f"_{question}_\n\nYou have 30 seconds!"
