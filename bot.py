@@ -1337,12 +1337,22 @@ _admin_server_started = False
 
 
 async def _start_admin_server():
+    global _admin_server_started
     app = create_web_app(load_economy, save_economy, get_shop_rotation, SHOP_ITEMS, MARKET_STOCKS, bot)
     runner = aiohttp.web.AppRunner(app)
     await runner.setup()
-    site = aiohttp.web.TCPSite(runner, "0.0.0.0", 47832)
-    await site.start()
-    print(f"Admin dashboard running at http://0.0.0.0:47832")
+    base_port = 47832
+    for port in range(base_port, base_port + 10):
+        try:
+            site = aiohttp.web.TCPSite(runner, "0.0.0.0", port)
+            await site.start()
+            _admin_server_started = True
+            print(f"Admin dashboard running at http://0.0.0.0:{port}")
+            return
+        except OSError:
+            continue
+    print("Admin dashboard failed to start: no available port in range 47832-47841")
+    _admin_server_started = False
 
 
 @bot.event
@@ -1357,7 +1367,6 @@ async def on_ready():
     meme_stock_drift.start()
     asyncio.ensure_future(tts_worker())
     if not _admin_server_started:
-        _admin_server_started = True
         asyncio.ensure_future(_start_admin_server())
 
 
