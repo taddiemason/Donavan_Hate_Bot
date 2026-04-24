@@ -396,17 +396,17 @@ DONOVAN_STOCK_BASE = 100.0
 USER_STOCK_BASE = 10.0
 
 MARKET_STOCKS = {
-    "DONOVAN": {"name": "Donovan Holdings Inc.",      "base_price": 100.0, "shares_outstanding": 10000, "shortable": True, "volatility": 2.0, "mean_reversion": 0.03},
-    "RUST":    {"name": "Rust Lang Corp",             "base_price": 42.0,  "shares_outstanding": 5000,  "shortable": True, "volatility": 2.5, "mean_reversion": 0.02},
-    "BIGMAC":  {"name": "McBigMac Enterprises",      "base_price": 5.99,  "shares_outstanding": 5000,  "shortable": True, "volatility": 1.2, "mean_reversion": 0.05},
-    "TORTA":   {"name": "Torta Brothers LLC",        "base_price": 12.50, "shares_outstanding": 5000,  "shortable": True, "volatility": 1.5, "mean_reversion": 0.04},
-    "TRUMP":   {"name": "Trump Media & Golf Co.",    "base_price": 75.0,  "shares_outstanding": 5000,  "shortable": True, "volatility": 3.5, "mean_reversion": 0.015},
-    "COCAINE": {"name": "Cartel Pharmaceuticals",    "base_price": 420.0, "shares_outstanding": 2000,  "shortable": True, "volatility": 5.0, "mean_reversion": 0.01},
-    "TBELL":   {"name": "Taco Bell Enterprises",     "base_price": 29.99, "shares_outstanding": 8000,  "shortable": True, "volatility": 3.0, "mean_reversion": 0.03},
-    "OHIO":    {"name": "Ohio Ventures LLC",         "base_price": 69.0,  "shares_outstanding": 4200,  "shortable": True, "volatility": 8.0, "mean_reversion": 0.005},
-    "FLORIDA": {"name": "Florida Man Holdings",      "base_price": 55.0,  "shares_outstanding": 3500,  "shortable": True, "volatility": 6.0, "mean_reversion": 0.01},
-    "YEEZY":   {"name": "Ye Industries",             "base_price": 88.0,  "shares_outstanding": 1000,  "shortable": True, "volatility": 9.0, "mean_reversion": 0.005},
-    "WENDY":   {"name": "Wendy's Corp",              "base_price": 38.0,  "shares_outstanding": 6000,  "shortable": True, "volatility": 2.8, "mean_reversion": 0.04},
+    "DONOVAN": {"name": "Donovan Holdings Inc.",      "base_price": 100.0, "shares_outstanding": 10000, "shortable": True, "volatility": 2.0, "mean_reversion": 0.03,  "daily_volume": 2000},
+    "RUST":    {"name": "Rust Lang Corp",             "base_price": 42.0,  "shares_outstanding": 5000,  "shortable": True, "volatility": 2.5, "mean_reversion": 0.02,  "daily_volume": 800},
+    "BIGMAC":  {"name": "McBigMac Enterprises",      "base_price": 5.99,  "shares_outstanding": 5000,  "shortable": True, "volatility": 1.2, "mean_reversion": 0.05,  "daily_volume": 3000},
+    "TORTA":   {"name": "Torta Brothers LLC",        "base_price": 12.50, "shares_outstanding": 5000,  "shortable": True, "volatility": 1.5, "mean_reversion": 0.04,  "daily_volume": 1500},
+    "TRUMP":   {"name": "Trump Media & Golf Co.",    "base_price": 75.0,  "shares_outstanding": 5000,  "shortable": True, "volatility": 3.5, "mean_reversion": 0.015, "daily_volume": 2500},
+    "COCAINE": {"name": "Cartel Pharmaceuticals",    "base_price": 420.0, "shares_outstanding": 2000,  "shortable": True, "volatility": 5.0, "mean_reversion": 0.01,  "daily_volume": 400},
+    "TBELL":   {"name": "Taco Bell Enterprises",     "base_price": 29.99, "shares_outstanding": 8000,  "shortable": True, "volatility": 3.0, "mean_reversion": 0.03,  "daily_volume": 2000},
+    "OHIO":    {"name": "Ohio Ventures LLC",         "base_price": 69.0,  "shares_outstanding": 4200,  "shortable": True, "volatility": 8.0, "mean_reversion": 0.005, "daily_volume": 1000},
+    "FLORIDA": {"name": "Florida Man Holdings",      "base_price": 55.0,  "shares_outstanding": 3500,  "shortable": True, "volatility": 6.0, "mean_reversion": 0.01,  "daily_volume": 1200},
+    "YEEZY":   {"name": "Ye Industries",             "base_price": 88.0,  "shares_outstanding": 1000,  "shortable": True, "volatility": 9.0, "mean_reversion": 0.005, "daily_volume": 200},
+    "WENDY":   {"name": "Wendy's Corp",              "base_price": 38.0,  "shares_outstanding": 6000,  "shortable": True, "volatility": 2.8, "mean_reversion": 0.04,  "daily_volume": 1800},
 }
 
 _ANALYST_QUOTES = [
@@ -1476,31 +1476,43 @@ async def meme_stock_drift():
             eco["market"][ticker]["volume_today"] = 0
         mstate["volume_date"] = today
 
-    # ── Price drift (per-stock volatility + mean reversion + momentum) ────────
+    # ── Volume-based price discovery ──────────────────────────────────────────
     now_iso = now.isoformat()
+    est_hour = (now.hour - 5) % 24
     for ticker, info in MARKET_STOCKS.items():
         mdata = eco["market"][ticker]
         price = mdata["price"]
         base = info["base_price"]
         vol = info["volatility"]
-        mr = info["mean_reversion"]
+        daily_vol = info["daily_volume"]
 
-        est_hour = (now.hour - 5) % 24
-        if ticker == "TBELL" and (est_hour >= 22 or est_hour < 4):
-            vol *= 3.0  # 4th meal hours: 10pm–4am EST
+        # TBELL 4th meal hours: triple volume and volatility 10pm–4am EST
+        tick_multiplier = 3.0 if ticker == "TBELL" and (est_hour >= 22 or est_hour < 4) else 1.0
 
-        mean_rev_pct = (base - price) / base * mr * 100
+        # Simulated tick volume — slice of daily volume with noise
+        tick_vol = max(10, round(daily_vol / 144 * random.uniform(0.5, 2.0) * tick_multiplier))
+
+        # Buy pressure probability — baked-in sentiment, mean reversion, momentum
         history = mdata.get("price_history", [price])
-        momentum_pct = (history[-1] / history[0] - 1) * 100 * 0.2 if len(history) >= 2 else 0.0
-        random_pct = random.gauss(0, vol)
-        sentiment_pct = sentiment * vol * 0.4
-        total_pct = max(-15.0, min(15.0, random_pct + mean_rev_pct + momentum_pct + sentiment_pct))
+        mr_tilt      = (base - price) / base * info["mean_reversion"] * 10
+        momentum_tilt = ((history[-1] / history[0] - 1) if len(history) >= 2 else 0.0) * 0.15
+        p_buy = max(0.15, min(0.85, 0.5 + sentiment * 0.15 + mr_tilt + momentum_tilt))
+
+        buy_vol  = round(tick_vol * p_buy)
+        sell_vol = tick_vol - buy_vol
+
+        # Order flow imbalance drives direction; volatility scales magnitude
+        ofi        = (buy_vol - sell_vol) / tick_vol
+        volume_pct = ofi * vol * 0.7 * tick_multiplier
+        noise_pct  = random.gauss(0, vol * 0.25)
+        total_pct  = max(-15.0, min(15.0, volume_pct + noise_pct))
 
         new_price = max(round(price * (1 + total_pct / 100), 2), 0.01)
-        mdata["price_history"] = (history + [new_price])[-3:]
-        mdata["prev_price"] = price
-        mdata["price"] = new_price
-        mdata["last_updated"] = now_iso
+        mdata["price_history"]  = (history + [new_price])[-3:]
+        mdata["prev_price"]     = price
+        mdata["price"]          = new_price
+        mdata["last_updated"]   = now_iso
+        mdata["volume_today"]   = mdata.get("volume_today", 0) + tick_vol
 
     # ── News events ───────────────────────────────────────────────────────────
     immediate_news = []
