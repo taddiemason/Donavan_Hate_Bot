@@ -80,7 +80,7 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot)
         total = 0.0
         for ticker, shares in stocks.items():
             price = eco.get("market", {}).get(ticker, {}).get(
-                "price", market_stocks.get(ticker, {}).get("price", 0)
+                "price", market_stocks.get(ticker, {}).get("base_price", 0)
             )
             total += shares * price
         return total
@@ -153,7 +153,7 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot)
 
         stock_rows = ""
         for ticker, info in market_stocks.items():
-            price = eco.get("market", {}).get(ticker, {}).get("price", info["price"])
+            price = eco.get("market", {}).get(ticker, {}).get("price", info.get("base_price", 0))
             stock_rows += (
                 f"<tr><td><b>{ticker}</b></td><td>{info['name']}</td>"
                 f"<td>{price:.2f}</td></tr>"
@@ -320,7 +320,7 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot)
         rows = ""
         for ticker, info in market_stocks.items():
             mdata = eco.get("market", {}).get(ticker, {})
-            price = mdata.get("price", info["price"])
+            price = mdata.get("price", info.get("base_price", 0))
             outstanding = info.get("outstanding", 1000)
             total_shorted = sum(
                 pos.get("shares", 0)
@@ -386,7 +386,7 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot)
         port_rows = ""
         for ticker, shares in stocks.items():
             price = eco.get("market", {}).get(ticker, {}).get(
-                "price", market_stocks.get(ticker, {}).get("price", 0)
+                "price", market_stocks.get(ticker, {}).get("base_price", 0)
             )
             val = shares * price
             port_value += val
@@ -401,7 +401,7 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot)
         for ticker, positions in shorts.items():
             for pos in positions:
                 cur_price = eco.get("market", {}).get(ticker, {}).get(
-                    "price", market_stocks.get(ticker, {}).get("price", 0)
+                    "price", market_stocks.get(ticker, {}).get("base_price", 0)
                 )
                 pnl = (pos["entry_price"] - cur_price) * pos["shares"]
                 cls = "green" if pnl >= 0 else "red"
