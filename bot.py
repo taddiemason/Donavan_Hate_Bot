@@ -1238,14 +1238,19 @@ def get_donovan_voice_channel(guild):
 
 async def tts_worker():
     while True:
-        guild_id, text = await tts_queue.get()
+        item = await tts_queue.get()
+        guild_id, text = item[0], item[1]
+        voice_channel_id = item[2] if len(item) > 2 else None
         tmp_path = None
         try:
             guild = bot.get_guild(guild_id)
             if not guild:
                 continue
 
-            channel = get_donovan_voice_channel(guild)
+            if voice_channel_id:
+                channel = bot.get_channel(voice_channel_id) or await bot.fetch_channel(voice_channel_id)
+            else:
+                channel = get_donovan_voice_channel(guild)
             if not channel:
                 continue
 
@@ -1378,7 +1383,7 @@ async def scheduled_roast():
         try:
             friday_channel = bot.get_channel(1236061974555791492) or await bot.fetch_channel(1236061974555791492)
             await friday_channel.send(msg)
-            await tts_queue.put((friday_channel.guild.id, msg))
+            await tts_queue.put((friday_channel.guild.id, msg, 1236061974555791492))
         except Exception as e:
             print(f"[ERROR] Friday TTS channel failed: {e}")
 
