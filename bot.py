@@ -406,6 +406,7 @@ MARKET_STOCKS = {
     "OHIO":    {"name": "Ohio Ventures LLC",         "base_price": 69.0,  "shares_outstanding": 4200,  "shortable": True, "volatility": 8.0, "mean_reversion": 0.005},
     "FLORIDA": {"name": "Florida Man Holdings",      "base_price": 55.0,  "shares_outstanding": 3500,  "shortable": True, "volatility": 6.0, "mean_reversion": 0.01},
     "YEEZY":   {"name": "Ye Industries",             "base_price": 88.0,  "shares_outstanding": 1000,  "shortable": True, "volatility": 9.0, "mean_reversion": 0.005},
+    "WENDY":   {"name": "Wendy's Corp",              "base_price": 38.0,  "shares_outstanding": 6000,  "shortable": True, "volatility": 2.8, "mean_reversion": 0.04},
 }
 
 _ANALYST_QUOTES = [
@@ -544,6 +545,22 @@ _STOCK_NEWS = {
         {"headline": "Ye partners with Donovan — analysts declare it 'the worst deal in history'",   "impact": (-20, -10), "linked": [("DONOVAN", (-12, -5))]},
         {"headline": "Ye goes on podcast — says something. Markets react.",                           "impact": (-25, 25)},
         {"headline": "YEEZY announces pivot to blockchain — trading halted",                          "impact": (-30, 10)},
+    ],
+    "WENDY": [
+        {"headline": "Wendy's Twitter: '{member} you literally eat Big Macs. sit down.'",              "impact": (5, 14),   "linked": [("BIGMAC", (-4, -1))]},
+        {"headline": "Wendy's Twitter: 'Donovan. We know what you did.'",                             "impact": (6, 15),   "linked": [("DONOVAN", (-8, -3))]},
+        {"headline": "Wendy's Twitter: 'our beef is never frozen. unlike {member}'s personality.'",   "impact": (8, 18)},
+        {"headline": "Wendy's Twitter: 'Taco Bell called our food mid. bold words from a gas station'","impact": (10, 20),  "linked": [("TBELL", (-6, -2))]},
+        {"headline": "Wendy's Twitter: 'we've been doing this since 1969. {member} just found out.'", "impact": (5, 12)},
+        {"headline": "Wendy's Twitter: 'ratio'",                                                       "impact": (12, 25)},
+        {"headline": "Wendy's Twitter goes too far — PR team seized control of account",              "impact": (-15, -5)},
+        {"headline": "Wendy's Twitter: 'Florida Man just tried to return a Frosty. we don't do that'","impact": (4, 10),   "linked": [("FLORIDA", (-3, 2))]},
+        {"headline": "Wendy's Twitter account suspended — investors panic",                            "impact": (-18, -8)},
+        {"headline": "Wendy's Twitter account reinstated — immediately posts another ratio",           "impact": (10, 22)},
+        {"headline": "Wendy's Twitter: 'Ohio. Just… Ohio.'",                                          "impact": (5, 12),   "linked": [("OHIO", (-10, 10))]},
+        {"headline": "Wendy's Twitter: 'our new breakfast. yes we have breakfast. {member} didn't know.'", "impact": (6, 15)},
+        {"headline": "Wendy's Twitter posts a single ❄️ directed at {member}. no context.",           "impact": (8, 18)},
+        {"headline": "Wendy's Twitter: 'square beef. round bun. your argument is invalid.'",          "impact": (5, 13)},
     ],
 }
 
@@ -1460,8 +1477,9 @@ async def meme_stock_drift():
         vol = info["volatility"]
         mr = info["mean_reversion"]
 
-        if ticker == "TBELL" and (now.hour >= 22 or now.hour < 4):
-            vol *= 3.0  # 4th meal hours: 10pm–4am UTC
+        est_hour = (now.hour - 5) % 24
+        if ticker == "TBELL" and (est_hour >= 22 or est_hour < 4):
+            vol *= 3.0  # 4th meal hours: 10pm–4am EST
 
         mean_rev_pct = (base - price) / base * mr * 100
         history = mdata.get("price_history", [price])
