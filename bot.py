@@ -1816,13 +1816,10 @@ async def highlow(ctx, amount: int = None):
         return
     number = random.randint(1, 100)
     highlow_games[ctx.author.id] = {"number": number, "bet": amount, "multiplier": 1.0, "channel_id": ctx.channel.id}
-    p_higher = round((100 - number) / 100 * 100)
-    p_lower = round((number - 1) / 100 * 100)
     await ctx.send(
         f"🎯 The number is **{number}**.\n"
-        f"Odds — higher: **{p_higher}%** (→ **{round(1 / max(0.01, (100 - number) / 100), 2)}x**) | "
-        f"lower: **{p_lower}%** (→ **{round(1 / max(0.01, (number - 1) / 100), 2)}x**)\n"
-        f"Type `higher`, `lower`, or `cashout`."
+        f"Will the next be `higher` or `lower`? Type your answer!\n"
+        f"Type `cashout` to take your winnings at any time."
     )
 
 
