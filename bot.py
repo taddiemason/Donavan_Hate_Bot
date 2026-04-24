@@ -203,7 +203,8 @@ tts_queue = asyncio.Queue()
 trial_active = False
 guess_game_active = False
 trivia_active = False
-trivia_recent = {}
+trivia_recent = {}        # channel_id -> last 8 question strings
+trivia_recent_cats = {}   # channel_id -> last 4 categories
 guessroast_active = False
 highlow_games = {}
 blackjack_games = {}
@@ -681,7 +682,12 @@ def get_shop_rotation():
     expires_str = eco.get("shop_rotation_expires")
     expires = datetime.datetime.fromisoformat(expires_str) if expires_str else None
     if not expires or now >= expires:
-        rotation = random.sample(list(SHOP_ITEMS.keys()), 5)
+        old_rotation = eco.get("shop_rotation") or []
+        available = [k for k in SHOP_ITEMS.keys() if k not in old_rotation]
+        if len(available) >= 5:
+            rotation = random.sample(available, 5)
+        else:
+            rotation = random.sample(list(SHOP_ITEMS.keys()), 5)
         # expire at next midnight ET
         et = ZoneInfo("America/New_York")
         now_et = now.astimezone(et)
@@ -899,9 +905,13 @@ TRIVIA_CATEGORIES = [
 ]
 
 
-async def generate_trivia_question():
+async def generate_trivia_question(used_topics=None, used_categories=None):
     import re
-    category = random.choice(TRIVIA_CATEGORIES)
+    # Avoid repeating recent categories
+    available = [c for c in TRIVIA_CATEGORIES if not used_categories or c not in used_categories]
+    category = random.choice(available or TRIVIA_CATEGORIES)
+    avoid = (f"\nDo NOT generate questions about these already-asked topics: {'; '.join(used_topics)}."
+             if used_topics else "")
     try:
         response = await groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -915,6 +925,7 @@ async def generate_trivia_question():
                         "- The answer must be a single word, number, or short phrase (3 words max)\n"
                         "- The answer must be at least 2 characters — no single-letter answers\n"
                         "- Avoid questions with multiple valid answers\n"
+                        f"{avoid}\n"
                         "Respond in EXACTLY this format:\n"
                         "QUESTION: <question>\n"
                         "ANSWER: <answer>"
@@ -1699,7 +1710,14 @@ async def trivia(ctx):
         return
     trivia_active = True
     try:
-        question, answer, category = await generate_trivia_question()
+        recent_q = trivia_recent.get(ctx.channel.id, [])
+        recent_cats = trivia_recent_cats.get(ctx.channel.id, [])
+        question, answer, category = await generate_trivia_question(
+            used_topics=recent_q or None,
+            used_categories=recent_cats or None,
+        )
+        trivia_recent[ctx.channel.id] = (recent_q + [question])[-8:]
+        trivia_recent_cats[ctx.channel.id] = (recent_cats + [category])[-4:]
         await ctx.send(
             f"🧠 **TRIVIA** _{category.title()}_ — First to answer wins **50 coins!**\n\n"
             f"_{question}_\n\nYou have 30 seconds!"
@@ -2282,6 +2300,26 @@ async def shop(ctx):
         f"🛒 **Roast Shop** — Today's Rotation _(refreshes in {hours_left}h {minutes_left}m)_\n\n"
         + "\n\n".join(lines)
         + "\n\nUse `!buy <item>` to purchase."
+    )
+
+
+@bot.command(name="resetshop")
+@commands.has_permissions(administrator=True)
+async def resetshop(ctx):
+    eco = load_economy()
+    eco["shop_rotation"] = None
+    eco["shop_rotation_expires"] = None
+    save_economy(eco)
+    rotation, expires = get_shop_rotation()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    seconds_left = int((expires - now).total_seconds())
+    hours_left = seconds_left // 3600
+    minutes_left = (seconds_left % 3600) // 60
+    lines = [f"**{SHOP_ITEMS[k]['name']}** (`{k}`) — {SHOP_ITEMS[k]['cost']} coins"
+             for k in rotation if k in SHOP_ITEMS]
+    await ctx.send(
+        f"🔄 Shop rotation reset! New rotation (expires in {hours_left}h {minutes_left}m):\n"
+        + "\n".join(lines)
     )
 
 
