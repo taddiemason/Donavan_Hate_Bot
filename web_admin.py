@@ -70,7 +70,7 @@ def _check_auth(request: aiohttp.web.Request) -> bool:
     return bool(token and _sessions.get(token))
 
 
-def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot):
+def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot, tts_queue=None):
 
     def _user_name(uid: str) -> str:
         user = bot.get_user(int(uid))
@@ -490,6 +490,9 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot)
       <textarea name="content" rows="6" style="flex:1;min-width:300px;background:#21262d;color:#c9d1d9;border:1px solid #30363d;padding:8px;border-radius:6px;font-family:inherit;font-size:.9em;resize:vertical"></textarea>
     </div>
     <div class="form-row">
+      <label><input type="checkbox" name="tts" value="1"> Also play via TTS</label>
+    </div>
+    <div class="form-row">
       <input type="submit" class="btn" value="Send Message">
     </div>
   </form>
@@ -511,6 +514,9 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot)
             return aiohttp.web.HTTPFound("/messages?err=Channel+not+found")
         await channel.send(content)
         ch_name = getattr(channel, "name", channel_id)
+        if data.get("tts") == "1" and tts_queue is not None:
+            guild_id = getattr(channel.guild, "id", None)
+            await tts_queue.put((guild_id, content))
         return aiohttp.web.HTTPFound(f"/messages?ok=Message+sent+to+%23{ch_name}")
 
     # ── Wire up routes ────────────────────────────────────────────────────────
