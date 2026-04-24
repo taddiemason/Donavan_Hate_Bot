@@ -1375,10 +1375,12 @@ async def scheduled_roast():
     elif today == 4:
         msg = random.choice(FRIDAY_ROASTS)
         await channel.send(msg)
-        friday_channel = bot.get_channel(1236061974555791492)
-        if friday_channel:
+        try:
+            friday_channel = bot.get_channel(1236061974555791492) or await bot.fetch_channel(1236061974555791492)
             await friday_channel.send(msg)
             await tts_queue.put((friday_channel.guild.id, msg))
+        except Exception as e:
+            print(f"[ERROR] Friday TTS channel failed: {e}")
 
 
 @tasks.loop(minutes=1)
