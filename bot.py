@@ -649,10 +649,18 @@ def init_market(eco):
             for ticker, info in MARKET_STOCKS.items()
         }
     else:
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         for ticker, info in MARKET_STOCKS.items():
-            eco["market"].setdefault(ticker, {}).setdefault(
-                "price_history", [eco["market"][ticker].get("price", info["base_price"])]
-            )
+            if ticker not in eco["market"]:
+                eco["market"][ticker] = {
+                    "price": info["base_price"],
+                    "prev_price": info["base_price"],
+                    "last_updated": now,
+                    "volume_today": 0,
+                    "price_history": [info["base_price"]],
+                }
+            else:
+                eco["market"][ticker].setdefault("price_history", [eco["market"][ticker].get("price", info["base_price"])])
     eco.setdefault("portfolios", {})
     eco.setdefault("short_positions", {})
     eco.setdefault("limit_orders", [])
