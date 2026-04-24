@@ -1340,9 +1340,18 @@ async def _start_admin_server():
     app = create_web_app(load_economy, save_economy, get_shop_rotation, SHOP_ITEMS, MARKET_STOCKS, bot)
     runner = aiohttp.web.AppRunner(app)
     await runner.setup()
-    site = aiohttp.web.TCPSite(runner, "127.0.0.1", 8080)
-    await site.start()
-    print(f"Admin dashboard running at http://127.0.0.1:8080")
+    for port in range(8080, 8090):
+        try:
+            site = aiohttp.web.TCPSite(runner, "127.0.0.1", port)
+            await site.start()
+            print(f"Admin dashboard running at http://127.0.0.1:{port}")
+            return
+        except OSError as e:
+            if e.errno == 98:
+                print(f"Port {port} in use, trying next...")
+            else:
+                raise
+    print("WARNING: Could not bind admin server on ports 8080-8089")
 
 
 @bot.event
