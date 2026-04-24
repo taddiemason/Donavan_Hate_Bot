@@ -396,13 +396,105 @@ DONOVAN_STOCK_BASE = 100.0
 USER_STOCK_BASE = 10.0
 
 MARKET_STOCKS = {
-    "DONOVAN": {"base_price": 100.0, "shares_outstanding": 10000, "shortable": True},
-    "RUST":    {"base_price": 42.0,  "shares_outstanding": 5000,  "shortable": True},
-    "BIGMAC":  {"base_price": 5.99,  "shares_outstanding": 5000,  "shortable": True},
-    "TORTA":   {"base_price": 12.50, "shares_outstanding": 5000,  "shortable": True},
-    "TRUMP":   {"base_price": 75.0,  "shares_outstanding": 5000,  "shortable": True},
-    "COCAINE": {"base_price": 420.0, "shares_outstanding": 2000,  "shortable": True},
+    "DONOVAN": {"name": "Donovan Holdings Inc.",      "base_price": 100.0, "shares_outstanding": 10000, "shortable": True, "volatility": 2.0, "mean_reversion": 0.03},
+    "RUST":    {"name": "Rust Lang Corp",             "base_price": 42.0,  "shares_outstanding": 5000,  "shortable": True, "volatility": 2.5, "mean_reversion": 0.02},
+    "BIGMAC":  {"name": "McBigMac Enterprises",      "base_price": 5.99,  "shares_outstanding": 5000,  "shortable": True, "volatility": 1.2, "mean_reversion": 0.05},
+    "TORTA":   {"name": "Torta Brothers LLC",        "base_price": 12.50, "shares_outstanding": 5000,  "shortable": True, "volatility": 1.5, "mean_reversion": 0.04},
+    "TRUMP":   {"name": "Trump Media & Golf Co.",    "base_price": 75.0,  "shares_outstanding": 5000,  "shortable": True, "volatility": 3.5, "mean_reversion": 0.015},
+    "COCAINE": {"name": "Cartel Pharmaceuticals",    "base_price": 420.0, "shares_outstanding": 2000,  "shortable": True, "volatility": 5.0, "mean_reversion": 0.01},
 }
+
+_ANALYST_QUOTES = [
+    "Jim Cramer says **BUY BUY BUY**",
+    "WSB calls it a **rug pull** 🚨",
+    "Goldman Sachs upgrades to **STRONG BUY**",
+    "Warren Buffett is reportedly **confused**",
+    "Cathie Wood adds to ARK position",
+    "Analysts raise price target to **the moon** 🌕",
+    "Short sellers are **crying**",
+    "SEC opens investigation",
+    "Options market implying **total chaos**",
+    "Cramer says **SELL** — so probably buy",
+    "JP Morgan downgrades to **SELL**",
+    "Retail investors **going all in**",
+    "Hedge funds **exiting positions**",
+    "Insider trading **heavily suspected**",
+]
+
+_STOCK_NEWS = {
+    "DONOVAN": [
+        {"headline": "Donovan spotted arguing with a wall — loses",                                    "impact": (-12, -5)},
+        {"headline": "Donovan forgets rent is due again",                                              "impact": (-8, -3)},
+        {"headline": "Donovan accidentally does something impressive",                                 "impact": (5, 15)},
+        {"headline": "Donovan issues public apology nobody asked for",                                 "impact": (-10, -3)},
+        {"headline": "Donovan goes viral for entirely the wrong reasons",                              "impact": (-6, 5)},
+        {"headline": "Donovan stress-eats Big Mac, investors rattled",                                 "impact": (-8, -2),  "linked": [("BIGMAC", (2, 6))]},
+        {"headline": "Donovan invests life savings in cocaine",                                        "impact": (-15, -8), "linked": [("COCAINE", (8, 18))]},
+        {"headline": "Trump personally endorses Donovan — markets baffled",                           "impact": (-5, 10),  "linked": [("TRUMP", (2, 8))]},
+        {"headline": "Donovan rage-quits Rust project, deletes entire repo",                          "impact": (3, 10),   "linked": [("RUST", (-8, -3))]},
+        {"headline": "Donovan spotted eating torta outside ex's house at 2am",                        "impact": (-6, -1),  "linked": [("TORTA", (1, 5))]},
+        {"headline": "{member} leaks Donovan's DMs — chaos ensues",                                   "impact": (-14, -6)},
+        {"headline": "Analysts say Donovan's potential is 'technically not zero'",                    "impact": (4, 12)},
+        {"headline": "Donovan challenges {member} to a fight, immediately backs down",                "impact": (-8, -2)},
+    ],
+    "RUST": [
+        {"headline": "Rust named most loved language for 10th consecutive year",                      "impact": (5, 15)},
+        {"headline": "Critical memory safety bug found in Rust stdlib — the irony",                   "impact": (-15, -8)},
+        {"headline": "Major tech giant rewrites entire codebase in Rust",                             "impact": (8, 20)},
+        {"headline": "Rust compile time hits new record: 6 hours for hello world",                    "impact": (-10, -3)},
+        {"headline": "Rust 2.0 announced — breaks all existing code, devs thrilled anyway",           "impact": (-5, 10)},
+        {"headline": "Rust borrow checker ruins {member}'s entire weekend",                           "impact": (-6, -2)},
+        {"headline": "Linux kernel adopts Rust — C developers in crisis",                             "impact": (10, 22)},
+        {"headline": "StackOverflow survey: Rust developers most insufferable",                       "impact": (-4, 4)},
+    ],
+    "BIGMAC": [
+        {"headline": "McDonald's raises Big Mac price for 47th consecutive quarter",                  "impact": (-8, -2)},
+        {"headline": "New Big Mac variant causes nationwide frenzy",                                   "impact": (8, 18)},
+        {"headline": "Health report links Big Mac to 12 previously unknown diseases",                 "impact": (-12, -5)},
+        {"headline": "McDonald's beats earnings expectations — somehow",                               "impact": (5, 15)},
+        {"headline": "Big Mac supply chain disruption traced to {member}",                            "impact": (-10, -3)},
+        {"headline": "Big Mac now legally classified as a vegetable in three states",                 "impact": (3, 10)},
+        {"headline": "Big Mac and Torta crossover menu announced",                                    "impact": (5, 12),   "linked": [("TORTA", (3, 8))]},
+        {"headline": "{member} attempts to eat 10 Big Macs in one sitting — hospitalised",           "impact": (-5, 5)},
+    ],
+    "TORTA": [
+        {"headline": "Local torta stand wins James Beard Award",                                       "impact": (8, 18)},
+        {"headline": "Torta shortage hits region — {member} suspected of hoarding",                   "impact": (-12, -5)},
+        {"headline": "Food influencer gives torta 10/10, calls it 'life-altering'",                   "impact": (6, 15)},
+        {"headline": "Health inspector shuts down torta stand — cockroaches cited",                   "impact": (-15, -8)},
+        {"headline": "Torta featured in NYT Food section — locals furious it's mainstream now",       "impact": (5, 12)},
+        {"headline": "Regional torta price war breaks out",                                            "impact": (-6, -1)},
+        {"headline": "{member} opens competing torta stand — turf war imminent",                      "impact": (-8, -2)},
+    ],
+    "TRUMP": [
+        {"headline": "Trump announces new business venture — analysts completely baffled",            "impact": (5, 18)},
+        {"headline": "New indictment dropped — 47th count this quarter",                              "impact": (-12, -5)},
+        {"headline": "Trump rage-posts 47 times before breakfast",                                    "impact": (-8, 8)},
+        {"headline": "Trump golfs — markets inexplicably rally",                                      "impact": (5, 15)},
+        {"headline": "Truth Social posts record quarterly loss, blames mainstream media",              "impact": (-10, -3)},
+        {"headline": "Trump personally calls {member} a loser on Truth Social",                       "impact": (-8, -2)},
+        {"headline": "Trump endorses Big Mac as America's official national food",                    "impact": (3, 8),    "linked": [("BIGMAC", (2, 6))]},
+        {"headline": "Trump announces tariffs on tortas — Donovan hardest hit",                       "impact": (4, 10),   "linked": [("TORTA", (-10, -4)), ("DONOVAN", (-6, -2))]},
+    ],
+    "COCAINE": [
+        {"headline": "DEA raids major distribution hub — {member} escapes on foot",                  "impact": (-20, -10)},
+        {"headline": "New market opens — Goldman upgrades to Strong Buy",                             "impact": (10, 25)},
+        {"headline": "Cartel leadership dispute disrupts supply chain",                               "impact": (-12, -5)},
+        {"headline": "Product quality hits all-time high — consumer confidence surges",               "impact": (8, 18)},
+        {"headline": "UN drug control report released — nobody reads it",                             "impact": (-4, 2)},
+        {"headline": "{member} spotted outside SEC building carrying unmarked briefcase",              "impact": (-10, -3)},
+        {"headline": "Walter White biopic greenlit — COCAINE surges on nostalgia",                   "impact": (10, 20)},
+        {"headline": "Cartel enters strategic partnership with Torta Brothers LLC",                   "impact": (8, 16),   "linked": [("TORTA", (4, 10))]},
+    ],
+}
+
+
+def _get_random_member_name() -> str:
+    for guild in bot.guilds:
+        members = [m for m in guild.members if not m.bot]
+        if members:
+            return random.choice(members).display_name
+    return "an anonymous insider"
 
 
 def get_stocks():
@@ -476,13 +568,21 @@ def init_market(eco):
                 "prev_price": info["base_price"],
                 "last_updated": now,
                 "volume_today": 0,
+                "price_history": [info["base_price"]],
             }
             for ticker, info in MARKET_STOCKS.items()
         }
+    else:
+        for ticker, info in MARKET_STOCKS.items():
+            eco["market"].setdefault(ticker, {}).setdefault(
+                "price_history", [eco["market"][ticker].get("price", info["base_price"])]
+            )
     eco.setdefault("portfolios", {})
     eco.setdefault("short_positions", {})
     eco.setdefault("limit_orders", [])
     eco.setdefault("next_order_id", 1)
+    eco.setdefault("market_state", {})
+    eco.setdefault("pending_rumors", [])
 
 
 def apply_price_impact(eco, ticker, shares, direction):
@@ -985,6 +1085,12 @@ async def judge_sports_answer(question, expected, user_answer):
         return expected.lower() in user_answer.lower()
 
 
+def _trivia_quick_match(expected: str, user: str) -> bool:
+    e_words = expected.lower().strip().split()
+    u_words = user.lower().strip().split()
+    return bool(u_words) and e_words[:len(u_words)] == u_words
+
+
 async def judge_trivia_answer(question, expected, user_answer):
     try:
         response = await groq_client.chat.completions.create(
@@ -1237,15 +1343,143 @@ async def limit_order_checker():
 async def meme_stock_drift():
     eco = load_economy()
     init_market(eco)
-    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    for ticker in ("RUST", "BIGMAC", "TORTA", "TRUMP", "COCAINE"):
-        price = eco["market"][ticker]["price"]
-        change_pct = random.uniform(-4.0, 4.0)
-        new_price = max(round(price * (1 + change_pct / 100), 2), 0.01)
-        eco["market"][ticker]["prev_price"] = price
-        eco["market"][ticker]["price"] = new_price
-        eco["market"][ticker]["last_updated"] = now
+    now = datetime.datetime.now(datetime.timezone.utc)
+    channel = bot.get_channel(ROAST_CHANNEL_ID) if ROAST_CHANNEL_ID else None
+    mstate = eco["market_state"]
+
+    # ── Resolve pending rumors ────────────────────────────────────────────────
+    still_pending = []
+    for rumor in eco.get("pending_rumors", []):
+        if now < datetime.datetime.fromisoformat(rumor["confirm_at"]):
+            still_pending.append(rumor)
+            continue
+        confirmed = random.random() < 0.70
+        if confirmed:
+            for t, pct in rumor["remaining_impact"].items():
+                if t in eco["market"]:
+                    old = eco["market"][t]["price"]
+                    eco["market"][t]["prev_price"] = old
+                    eco["market"][t]["price"] = max(round(old * (1 + pct / 100), 2), 0.01)
+            if channel:
+                new_p = eco["market"][rumor["ticker"]]["price"]
+                analyst = random.choice(_ANALYST_QUOTES)
+                await channel.send(
+                    f"✅ **CONFIRMED — ${rumor['ticker']}:** {rumor['headline']}\n"
+                    f"**${rumor['old_price']:.2f} → ${new_p:.2f}** | {analyst}"
+                )
+        else:
+            for t, pct in rumor["pre_impact"].items():
+                if t in eco["market"]:
+                    old = eco["market"][t]["price"]
+                    eco["market"][t]["prev_price"] = old
+                    eco["market"][t]["price"] = max(round(old * (1 - pct / 100), 2), 0.01)
+            if channel:
+                await channel.send(
+                    f"❌ **DENIED — ${rumor['ticker']}:** *\"{rumor['headline']}\"* was **FAKE NEWS**. "
+                    f"Price reverting. 📉"
+                )
+    eco["pending_rumors"] = still_pending
+
+    # ── Market sentiment: slow random walk, mean-reverts to 0 ─────────────────
+    sentiment = mstate.get("sentiment", 0.0)
+    sentiment = max(-1.0, min(1.0, sentiment * 0.92 + random.gauss(0, 0.1)))
+    mstate["sentiment"] = round(sentiment, 4)
+
+    # ── Daily volume reset ────────────────────────────────────────────────────
+    today = now.strftime("%Y-%m-%d")
+    if mstate.get("volume_date") != today:
+        for ticker in MARKET_STOCKS:
+            eco["market"][ticker]["volume_today"] = 0
+        mstate["volume_date"] = today
+
+    # ── Price drift (per-stock volatility + mean reversion + momentum) ────────
+    now_iso = now.isoformat()
+    for ticker, info in MARKET_STOCKS.items():
+        mdata = eco["market"][ticker]
+        price = mdata["price"]
+        base = info["base_price"]
+        vol = info["volatility"]
+        mr = info["mean_reversion"]
+
+        mean_rev_pct = (base - price) / base * mr * 100
+        history = mdata.get("price_history", [price])
+        momentum_pct = (history[-1] / history[0] - 1) * 100 * 0.2 if len(history) >= 2 else 0.0
+        random_pct = random.gauss(0, vol)
+        sentiment_pct = sentiment * vol * 0.4
+        total_pct = max(-15.0, min(15.0, random_pct + mean_rev_pct + momentum_pct + sentiment_pct))
+
+        new_price = max(round(price * (1 + total_pct / 100), 2), 0.01)
+        mdata["price_history"] = (history + [new_price])[-3:]
+        mdata["prev_price"] = price
+        mdata["price"] = new_price
+        mdata["last_updated"] = now_iso
+
+    # ── News events ───────────────────────────────────────────────────────────
+    immediate_news = []
+    for ticker in MARKET_STOCKS:
+        if random.random() > 0.03:
+            continue
+        event = random.choice(_STOCK_NEWS[ticker])
+        headline = event["headline"]
+        if "{member}" in headline:
+            headline = headline.replace("{member}", _get_random_member_name())
+
+        impact_pct = random.uniform(*event["impact"])
+        impacts = {ticker: impact_pct}
+        for linked_ticker, linked_range in event.get("linked", []):
+            impacts[linked_ticker] = random.uniform(*linked_range)
+
+        is_rumor = random.random() < 0.30
+        if is_rumor:
+            pre_impact, remaining_impact = {}, {}
+            for t, pct in impacts.items():
+                pre_impact[t] = round(pct * 0.25, 4)
+                remaining_impact[t] = round(pct * 0.75, 4)
+                if t in eco["market"]:
+                    old = eco["market"][t]["price"]
+                    eco["market"][t]["prev_price"] = old
+                    eco["market"][t]["price"] = max(round(old * (1 + pre_impact[t] / 100), 2), 0.01)
+            eco["pending_rumors"].append({
+                "ticker": ticker,
+                "headline": headline,
+                "old_price": eco["market"][ticker]["price"],
+                "pre_impact": pre_impact,
+                "remaining_impact": remaining_impact,
+                "confirm_at": (now + datetime.timedelta(minutes=20)).isoformat(),
+            })
+            if channel:
+                pre_pct = pre_impact[ticker]
+                cur_p = eco["market"][ticker]["price"]
+                await channel.send(
+                    f"🔍 **UNCONFIRMED — ${ticker}:** *\"{headline}\"*\n"
+                    f"Markets reacting cautiously: **${cur_p:.2f}** ({pre_pct:+.1f}% pre-move) "
+                    f"— confirmation expected in ~20 min..."
+                )
+        else:
+            old_price = eco["market"][ticker]["price"]
+            for t, pct in impacts.items():
+                if t in eco["market"]:
+                    old = eco["market"][t]["price"]
+                    eco["market"][t]["prev_price"] = old
+                    eco["market"][t]["price"] = max(round(old * (1 + pct / 100), 2), 0.01)
+            immediate_news.append((ticker, headline, impact_pct, old_price, impacts))
+
     save_economy(eco)
+
+    if channel:
+        for ticker, headline, impact_pct, old_p, impacts in immediate_news:
+            arrow = "📈" if impact_pct > 0 else "📉"
+            new_p = eco["market"][ticker]["price"]
+            analyst = random.choice(_ANALYST_QUOTES)
+            linked_str = "".join(
+                f" | **${t}** → **${eco['market'][t]['price']:.2f}** ({pct:+.1f}%)"
+                for t, pct in impacts.items() if t != ticker
+            )
+            await channel.send(
+                f"{arrow} **BREAKING — ${ticker}:** {headline}\n"
+                f"**${old_p:.2f} → ${new_p:.2f}** ({impact_pct:+.1f}%){linked_str}\n"
+                f"*{analyst}*"
+            )
 
 
 @tasks.loop(minutes=5)
@@ -1766,7 +2000,9 @@ async def trivia(ctx):
             try:
                 msg = await bot.wait_for("message", check=check, timeout=remaining)
                 user_answer = msg.content.strip()
-                if len(user_answer.split()) > 5:
+                if _trivia_quick_match(answer, user_answer):
+                    correct = True
+                elif len(user_answer.split()) > 5:
                     correct = answer.lower() in user_answer.lower()
                 else:
                     correct = await judge_trivia_answer(question, answer, user_answer)
