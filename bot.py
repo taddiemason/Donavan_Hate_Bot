@@ -14,6 +14,9 @@ from gtts import gTTS
 
 load_dotenv()
 
+import aiohttp.web
+from web_admin import create_web_app, ADMIN_PASSWORD
+
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -1330,8 +1333,21 @@ async def margin_call_checker():
 
 
 
+_admin_server_started = False
+
+
+async def _start_admin_server():
+    app = create_web_app(load_economy, save_economy, get_shop_rotation, SHOP_ITEMS, MARKET_STOCKS, bot)
+    runner = aiohttp.web.AppRunner(app)
+    await runner.setup()
+    site = aiohttp.web.TCPSite(runner, "127.0.0.1", 8080)
+    await site.start()
+    print(f"Admin dashboard running at http://127.0.0.1:8080")
+
+
 @bot.event
 async def on_ready():
+    global _admin_server_started
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
     scheduled_roast.start()
     weekly_recap.start()
@@ -1340,6 +1356,9 @@ async def on_ready():
     margin_call_checker.start()
     meme_stock_drift.start()
     asyncio.ensure_future(tts_worker())
+    if not _admin_server_started:
+        _admin_server_started = True
+        asyncio.ensure_future(_start_admin_server())
 
 
 @bot.event
@@ -2680,7 +2699,7 @@ async def toggle_tts(ctx, state: str = None):
 async def update_bot(ctx):
     import subprocess
     await ctx.send("⬇️ Pulling latest changes...")
-    result = subprocess.run(["git", "pull"], capture_output=True, text=True)
+    result = subprocess.run(["git", "pull", "origin", "claude/fix-sports-trivia-HBbRZ"], capture_output=True, text=True)
     output = result.stdout.strip() or result.stderr.strip() or "No output."
     await ctx.send(f"```{output}```")
     if result.returncode != 0:
