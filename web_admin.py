@@ -1,6 +1,7 @@
 import os
 import secrets
 import datetime
+import traceback
 import aiohttp.web
 
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
@@ -111,7 +112,7 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot)
             token = secrets.token_hex(32)
             _sessions[token] = True
             resp = aiohttp.web.HTTPFound("/")
-            resp.set_cookie("admin_token", token, httponly=True, samesite="Strict")
+            resp.set_cookie("admin_token", token, httponly=True)
             return resp
         return aiohttp.web.HTTPFound("/login?err=1")
 
@@ -460,7 +461,17 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot)
 
     # ── Wire up routes ────────────────────────────────────────────────────────
 
-    app = aiohttp.web.Application()
+    @aiohttp.web.middleware
+    async def error_middleware(request, handler):
+        try:
+            return await handler(request)
+        except aiohttp.web.HTTPException:
+            raise
+        except Exception:
+            traceback.print_exc()
+            return aiohttp.web.Response(status=500, text="500 Internal Server Error — check bot terminal for details")
+
+    app = aiohttp.web.Application(middlewares=[error_middleware])
     app.router.add_get("/login", handle_login_get)
     app.router.add_post("/login", handle_login_post)
     app.router.add_get("/logout", handle_logout)
