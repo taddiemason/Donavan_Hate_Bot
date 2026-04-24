@@ -985,6 +985,12 @@ async def judge_sports_answer(question, expected, user_answer):
         return expected.lower() in user_answer.lower()
 
 
+def _trivia_quick_match(expected: str, user: str) -> bool:
+    e_words = expected.lower().strip().split()
+    u_words = user.lower().strip().split()
+    return bool(u_words) and e_words[:len(u_words)] == u_words
+
+
 async def judge_trivia_answer(question, expected, user_answer):
     try:
         response = await groq_client.chat.completions.create(
@@ -1766,7 +1772,9 @@ async def trivia(ctx):
             try:
                 msg = await bot.wait_for("message", check=check, timeout=remaining)
                 user_answer = msg.content.strip()
-                if len(user_answer.split()) > 5:
+                if _trivia_quick_match(answer, user_answer):
+                    correct = True
+                elif len(user_answer.split()) > 5:
                     correct = answer.lower() in user_answer.lower()
                 else:
                     correct = await judge_trivia_answer(question, answer, user_answer)
