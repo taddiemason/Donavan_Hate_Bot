@@ -53,6 +53,7 @@ def _page(title: str, body: str, nav: bool = True) -> aiohttp.web.Response:
   <a href="/economy">Economy</a>
   <a href="/shop">Shop</a>
   <a href="/stocks">Stocks</a>
+  <a href="/messages">Messages</a>
   <a href="/logout">Logout</a>
 </nav>"""
     return aiohttp.web.Response(
@@ -459,6 +460,59 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot)
 </div>"""
         return _page(f"User: {name}", body)
 
+    # ── Messages ─────────────────────────────────────────────────────────────
+
+    async def handle_messages(request):
+        if not _check_auth(request):
+            return aiohttp.web.HTTPFound("/login")
+        msg = ""
+        if request.rel_url.query.get("ok"):
+            msg = f'<div class="msg ok">{request.rel_url.query["ok"]}</div>'
+        if request.rel_url.query.get("err"):
+            msg = f'<div class="msg err">{request.rel_url.query["err"]}</div>'
+
+        options = ""
+        for guild in sorted(bot.guilds, key=lambda g: g.name):
+            options += f'<optgroup label="{guild.name}">'
+            for ch in sorted(guild.text_channels, key=lambda c: c.position):
+                options += f'<option value="{ch.id}">#{ch.name}</option>'
+            options += "</optgroup>"
+
+        body = f"""{msg}
+<div class="panel">
+  <form method="post" action="/api/sendmessage">
+    <div class="form-row">
+      <label>Channel</label>
+      <select name="channel_id" style="min-width:220px">{options}</select>
+    </div>
+    <div class="form-row" style="align-items:flex-start">
+      <label style="margin-top:6px">Message</label>
+      <textarea name="content" rows="6" style="flex:1;min-width:300px;background:#21262d;color:#c9d1d9;border:1px solid #30363d;padding:8px;border-radius:6px;font-family:inherit;font-size:.9em;resize:vertical"></textarea>
+    </div>
+    <div class="form-row">
+      <input type="submit" class="btn" value="Send Message">
+    </div>
+  </form>
+</div>"""
+        return _page("Messages", body)
+
+    async def handle_sendmessage_api(request):
+        if not _check_auth(request):
+            return aiohttp.web.HTTPFound("/login")
+        data = await request.post()
+        channel_id = data.get("channel_id", "").strip()
+        content = data.get("content", "").strip()
+        if not channel_id:
+            return aiohttp.web.HTTPFound("/messages?err=No+channel+selected")
+        if not content:
+            return aiohttp.web.HTTPFound("/messages?err=Message+cannot+be+empty")
+        channel = bot.get_channel(int(channel_id))
+        if channel is None:
+            return aiohttp.web.HTTPFound("/messages?err=Channel+not+found")
+        await channel.send(content)
+        ch_name = getattr(channel, "name", channel_id)
+        return aiohttp.web.HTTPFound(f"/messages?ok=Message+sent+to+%23{ch_name}")
+
     # ── Wire up routes ────────────────────────────────────────────────────────
 
     @aiohttp.web.middleware
@@ -483,4 +537,6 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot)
     app.router.add_get("/stocks", handle_stocks)
     app.router.add_post("/api/setprice", handle_setprice_api)
     app.router.add_get("/user/{uid}", handle_user)
+    app.router.add_get("/messages", handle_messages)
+    app.router.add_post("/api/sendmessage", handle_sendmessage_api)
     return app
