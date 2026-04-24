@@ -1373,7 +1373,12 @@ async def scheduled_roast():
     if today == 0:
         await channel.send(random.choice(MONDAY_ROASTS))
     elif today == 4:
-        await channel.send(random.choice(FRIDAY_ROASTS))
+        msg = random.choice(FRIDAY_ROASTS)
+        await channel.send(msg)
+        friday_channel = bot.get_channel(1236061974555791492)
+        if friday_channel:
+            await friday_channel.send(msg)
+            await tts_queue.put((friday_channel.guild.id, msg))
 
 
 @tasks.loop(minutes=1)
