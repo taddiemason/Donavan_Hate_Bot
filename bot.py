@@ -1403,7 +1403,11 @@ async def on_message(message):
                 if new_num == old_num:
                     await message.channel.send(f"🎯 It's **{new_num}** — a tie! Keep going.")
                 elif correct:
-                    game["multiplier"] += 1
+                    if content == "higher":
+                        p_win = max(0.01, (100 - old_num) / 100)
+                    else:
+                        p_win = max(0.01, (old_num - 1) / 100)
+                    game["multiplier"] = round(game["multiplier"] * (1 / p_win), 2)
                     game["number"] = new_num
                     await message.channel.send(f"✅ **{new_num}!** Correct! Multiplier: **{game['multiplier']}x** — type `higher`, `lower`, or `cashout`.")
                 else:
@@ -1411,7 +1415,7 @@ async def on_message(message):
                     del highlow_games[message.author.id]
                     await message.channel.send(f"❌ **{new_num}!** Wrong! You lost **{bet} coins**.")
             elif content == "cashout":
-                winnings = game["bet"] * game["multiplier"]
+                winnings = round(game["bet"] * game["multiplier"])
                 add_coins(message.author.id, winnings)
                 del highlow_games[message.author.id]
                 await message.channel.send(f"💰 Cashed out at **{game['multiplier']}x**! You won **{winnings} coins**!")
@@ -1811,8 +1815,15 @@ async def highlow(ctx, amount: int = None):
         await ctx.send(f"Not enough coins. You have **{bal}**.")
         return
     number = random.randint(1, 100)
-    highlow_games[ctx.author.id] = {"number": number, "bet": amount, "multiplier": 1, "channel_id": ctx.channel.id}
-    await ctx.send(f"🎯 The number is **{number}**.\nWill the next be `higher` or `lower`? Type your answer!\nType `cashout` to take your winnings at any time.")
+    highlow_games[ctx.author.id] = {"number": number, "bet": amount, "multiplier": 1.0, "channel_id": ctx.channel.id}
+    p_higher = round((100 - number) / 100 * 100)
+    p_lower = round((number - 1) / 100 * 100)
+    await ctx.send(
+        f"🎯 The number is **{number}**.\n"
+        f"Odds — higher: **{p_higher}%** (→ **{round(1 / max(0.01, (100 - number) / 100), 2)}x**) | "
+        f"lower: **{p_lower}%** (→ **{round(1 / max(0.01, (number - 1) / 100), 2)}x**)\n"
+        f"Type `higher`, `lower`, or `cashout`."
+    )
 
 
 @bot.command(name="blackjack")
