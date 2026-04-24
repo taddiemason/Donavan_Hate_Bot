@@ -1698,6 +1698,16 @@ async def on_disconnect():
 
 
 @bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        return
+    print(f"[ERROR] Command '{ctx.command}' raised: {error}")
+    import traceback
+    traceback.print_exception(type(error), error, error.__traceback__)
+    await ctx.send(f"❌ Command error: `{error}`")
+
+
+@bot.event
 async def on_message(message):
     print(f"[DEBUG] Any message received: {message.author} - {message.content[:50]}")
     if message.author == bot.user:
@@ -2465,6 +2475,7 @@ async def lottery(ctx, amount: int = None):
 async def stock_market(ctx):
     eco = load_economy()
     init_market(eco)
+    save_economy(eco)
 
     lines = ["📊 **DONOVAN STOCK EXCHANGE**\n"]
 
