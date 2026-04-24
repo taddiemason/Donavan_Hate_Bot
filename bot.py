@@ -1338,7 +1338,7 @@ _admin_server_started = False
 
 async def _start_admin_server():
     global _admin_server_started
-    app = create_web_app(load_economy, save_economy, get_shop_rotation, SHOP_ITEMS, MARKET_STOCKS, bot)
+    app = create_web_app(load_economy, save_economy, get_shop_rotation, SHOP_ITEMS, MARKET_STOCKS, bot, tts_queue)
     runner = aiohttp.web.AppRunner(app)
     await runner.setup()
     base_port = 47832
