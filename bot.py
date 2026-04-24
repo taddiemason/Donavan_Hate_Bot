@@ -934,7 +934,7 @@ async def generate_trivia_question():
                 raw = line[line.index(":") + 1:].strip()
                 raw = re.sub(r'[^\w\s]', '', raw).strip()
                 answer = " ".join(raw.split()[:3])
-        if question and answer and len(answer) >= 2:
+        if question and answer and len(answer) >= 2 and len(question) <= 150:
             return question, answer, category
     except Exception as e:
         print(f"[ERROR] Trivia generation failed: {e}")
@@ -969,6 +969,35 @@ async def judge_sports_answer(question, expected, user_answer):
     except Exception as e:
         print(f"[ERROR] Answer judge failed: {e}")
         return expected.lower() in user_answer.lower()
+
+
+async def judge_trivia_answer(question, expected, user_answer):
+    try:
+        response = await groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a trivia answer judge. Decide if the player's answer is correct.\n"
+                        "Accept: the exact answer, common abbreviations, partial answers that clearly "
+                        "identify the correct answer (e.g. 'Amazon' for 'Amazon River', 'Shakespeare' "
+                        "for 'William Shakespeare'), minor typos and spelling mistakes.\n"
+                        "Reject: clearly wrong answers.\n"
+                        "Reply with ONLY 'yes' or 'no'."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"Question: {question}\nCorrect answer: {expected}\nPlayer answered: {user_answer}\nIs the player correct?",
+                },
+            ],
+            max_tokens=5,
+        )
+        return response.choices[0].message.content.strip().lower().startswith("yes")
+    except Exception as e:
+        print(f"[ERROR] Trivia judge failed: {e}")
+        return expected.lower() in user_answer.lower() or user_answer.lower() in expected.lower()
 
 
 async def is_hot_take(text):
@@ -1690,7 +1719,7 @@ async def trivia(ctx):
                 if len(user_answer.split()) > 5:
                     correct = answer.lower() in user_answer.lower()
                 else:
-                    correct = await judge_sports_answer(question, answer, user_answer)
+                    correct = await judge_trivia_answer(question, answer, user_answer)
                 if correct:
                     winner = msg
                     break
