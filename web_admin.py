@@ -347,7 +347,19 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot,
   </td>
 </tr>"""
 
+        news_enabled = eco.get("news_events_enabled", True)
+        news_label = '<span class="green">Enabled</span>' if news_enabled else '<span class="red">Disabled</span>'
+        news_btn_cls = "btn danger" if news_enabled else "btn"
+        news_btn_txt = "Disable News Events" if news_enabled else "Enable News Events"
+
         body = f"""{msg}
+<div class="panel" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+  <span><b>Market News Events:</b> {news_label}</span>
+  <form method="post" action="/api/togglenews" style="margin:0">
+    <input type="submit" class="{news_btn_cls}" value="{news_btn_txt}">
+  </form>
+</div>
+
 <table>
   <thead><tr><th>Ticker</th><th>Name</th><th>Price</th><th>Short Interest</th><th>Override Price</th></tr></thead>
   <tbody>{rows}</tbody>
@@ -371,6 +383,16 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot,
         eco.setdefault("market", {}).setdefault(ticker, {})["price"] = price
         save_eco(eco)
         return aiohttp.web.HTTPFound(f"/stocks?ok=Set+{ticker}+price+to+{price:.2f}")
+
+    async def handle_togglenews_api(request):
+        if not _check_auth(request):
+            return aiohttp.web.HTTPFound("/login")
+        eco = load_eco()
+        current = eco.get("news_events_enabled", True)
+        eco["news_events_enabled"] = not current
+        save_eco(eco)
+        status = "enabled" if eco["news_events_enabled"] else "disabled"
+        return aiohttp.web.HTTPFound(f"/stocks?ok=Market+news+events+{status}")
 
     # ── User Detail ──────────────────────────────────────────────────────────
 
@@ -546,6 +568,7 @@ def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot,
     app.router.add_post("/api/resetshop", handle_resetshop_api)
     app.router.add_get("/stocks", handle_stocks)
     app.router.add_post("/api/setprice", handle_setprice_api)
+    app.router.add_post("/api/togglenews", handle_togglenews_api)
     app.router.add_get("/user/{uid}", handle_user)
     app.router.add_get("/messages", handle_messages)
     app.router.add_post("/api/sendmessage", handle_sendmessage_api)
