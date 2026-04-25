@@ -73,7 +73,11 @@ def _check_auth(request: aiohttp.web.Request) -> bool:
 def create_web_app(load_eco, save_eco, get_shop, shop_items, market_stocks, bot, tts_queue=None):
 
     def _user_name(uid: str) -> str:
-        user = bot.get_user(int(uid))
+        try:
+            user_id = int(uid)
+        except (TypeError, ValueError):
+            return uid
+        user = bot.get_user(user_id)
         return user.display_name if user else uid
 
     def _portfolio_value(eco: dict, uid: str) -> float:
