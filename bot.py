@@ -1526,9 +1526,15 @@ async def meme_stock_drift():
         mdata["volume_today"]   = mdata.get("volume_today", 0) + tick_vol
 
     # ── News events ───────────────────────────────────────────────────────────
+    if not eco.get("news_events_enabled", True):
+        save_economy(eco)
+        return
+
     immediate_news = []
+    night_hours = 0 <= est_hour < 9
+    event_chance = 0.01 if night_hours else 0.03
     for ticker in MARKET_STOCKS:
-        if random.random() > 0.03:
+        if random.random() > event_chance:
             continue
         event = random.choice(_STOCK_NEWS[ticker])
         headline = event["headline"]
@@ -2724,6 +2730,17 @@ async def resetshop(ctx):
         f"🔄 Shop rotation reset! New rotation (expires in {hours_left}h {minutes_left}m):\n"
         + "\n".join(lines)
     )
+
+
+@bot.command(name="togglenews")
+@commands.has_permissions(administrator=True)
+async def toggle_news(ctx):
+    eco = load_economy()
+    current = eco.get("news_events_enabled", True)
+    eco["news_events_enabled"] = not current
+    save_economy(eco)
+    status = "enabled ✅" if eco["news_events_enabled"] else "disabled ❌"
+    await ctx.send(f"📰 Market news events are now **{status}**.")
 
 
 @bot.command(name="buy")
