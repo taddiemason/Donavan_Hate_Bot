@@ -1,0 +1,16 @@
+[Unit]
+Description=Donavan Hate Bot
+After=network.target
+
+[Service]
+User=taddiemason
+WorkingDirectory=/home/taddiemason/Hate-Bot
+EnvironmentFile=/home/taddiemason/Hate-Bot/.env
+ExecStart=/home/taddiemason/Hate-Bot/venv/bin/python /home/taddiemason/Hate-Bot/bot.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
